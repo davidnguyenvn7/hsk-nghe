@@ -309,8 +309,21 @@ final class AdminPages
                         <p class="description">Để trống = giữ key cũ. Nhập <code>-</code> để xoá.</p></td></tr>
                     <tr><th>Model</th><td><input type="text" name="<?php echo esc_attr($a); ?>[deepseek_model]" value="<?php echo esc_attr($api['deepseek_model']); ?>" class="regular-text"></td></tr>
                     <tr><th>Giọng đọc</th><td>
-                        <label><input type="radio" name="<?php echo esc_attr($a); ?>[tts]" value="azure" <?php checked($api['tts'], 'azure'); ?>> Azure Speech (chính thức, dùng được trên hosting)</label><br>
+                        <label><input type="radio" name="<?php echo esc_attr($a); ?>[tts]" value="google" <?php checked($api['tts'], 'google'); ?>> Google Cloud Text-to-Speech (khuyến nghị)</label><br>
+                        <label><input type="radio" name="<?php echo esc_attr($a); ?>[tts]" value="azure" <?php checked($api['tts'], 'azure'); ?>> Azure Speech</label><br>
                         <label><input type="radio" name="<?php echo esc_attr($a); ?>[tts]" value="local" <?php checked($api['tts'], 'local'); ?>> Python + edge-tts trên máy này (chỉ cho site Local/dev)</label></td></tr>
+                    <tr><th>Google Cloud API key</th><td>
+                        <input type="password" name="<?php echo esc_attr($a); ?>[google_key]" value="" class="regular-text" autocomplete="off"
+                               placeholder="<?php echo esc_attr($api['google_key'] ? 'Đã lưu: ' . ApiSettings::mask($api['google_key']) : 'AIza…'); ?>">
+                        <p class="description">console.cloud.google.com → tạo project → bật <em>Cloud Text-to-Speech API</em> → gắn tài khoản thanh toán (thẻ)
+                            → <em>APIs &amp; Services → Credentials → Create credentials → API key</em> → giới hạn key chỉ cho Text-to-Speech API.
+                            Giọng WaveNet miễn phí 1 triệu ký tự/tháng.</p></td></tr>
+                    <tr><th>Giọng Google</th><td>
+                        <?php foreach (['zh_f' => 'Trung (nữ)', 'zh_m' => 'Trung (nam, người B)', 'vi' => 'Việt', 'en' => 'Anh'] as $k => $label) : ?>
+                            <label style="display:inline-block;margin:0 12px 6px 0"><?php echo esc_html($label); ?><br>
+                                <input type="text" name="<?php echo esc_attr($a); ?>[google_voices][<?php echo esc_attr($k); ?>]" value="<?php echo esc_attr($api['google_voices'][$k]); ?>" style="width:170px"></label>
+                        <?php endforeach; ?>
+                        <p class="description">Tên giọng theo danh sách của Google (ví dụ <code>cmn-CN-Wavenet-A</code>, <code>vi-VN-Neural2-A</code>). Giọng mới chỉ áp dụng cho clip tạo sau này.</p></td></tr>
                     <tr><th>Azure Speech key</th><td>
                         <input type="password" name="<?php echo esc_attr($a); ?>[azure_key]" value="" class="regular-text" autocomplete="off"
                                placeholder="<?php echo esc_attr($api['azure_key'] ? 'Đã lưu: ' . ApiSettings::mask($api['azure_key']) : ''); ?>">

@@ -7,7 +7,7 @@ use HSKN\Support\ApiSettings;
 defined('ABSPATH') || exit;
 
 /**
- * Tạo clip MP3 (24 kHz mono 48 kbps — cùng định dạng edge-tts để AudioRenderer ghép được).
+ * Tạo clip MP3 24 kHz (cùng tần số với clip edge-tts để AudioRenderer ghép chung một file được).
  */
 final class Tts
 {
@@ -25,6 +25,9 @@ final class Tts
 
     public function ready(): ?string
     {
+        if ($this->api['tts'] === 'google' && $this->api['google_key'] === '') {
+            return 'Chưa nhập Google Cloud API key (HSK Nghe → Cài đặt).';
+        }
         if ($this->api['tts'] === 'azure' && ($this->api['azure_key'] === '' || $this->api['azure_region'] === '')) {
             return 'Chưa nhập Azure Speech key / region (HSK Nghe → Cài đặt).';
         }
@@ -43,7 +46,52 @@ final class Tts
         if (!$jobs) {
             return ['ok' => [], 'errors' => []];
         }
-        return $this->api['tts'] === 'local' ? $this->local($jobs) : $this->azure($jobs);
+        return match ($this->api['tts']) {
+            'local'  => $this->local($jobs),
+            'azure'  => $this->azure($jobs),
+            default  => $this->google($jobs),
+        };
+    }
+
+    /**
+     * Google Cloud Text-to-Speech (REST + API key). Giọng logic (zh_f, zh_m, vi, en) → giọng Google trong Cài đặt;
+     * tốc độ "-25%" → speakingRate 0.75. Xin MP3 24 kHz để ghép chung với clip edge-tts sẵn có.
+     */
+    private function google(array $jobs): array
+    {
+        $out = ['ok' => [], 'errors' => []];
+        $logical = array_flip(AudioService::VOICE);          // zh-CN-XiaoxiaoNeural → zh_f
+        $url = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' . rawurlencode($this->api['google_key']);
+        foreach ($jobs as $j) {
+            $name = $this->api['google_voices'][$logical[$j['voice']] ?? ''] ?? null;
+            if (!$name) {
+                $out['errors'][$j['path']] = 'Không có giọng Google cho ' . $j['voice'];
+                continue;
+            }
+            $rate = 1 + ((int) $j['rate']) / 100;               // "-25%" → 0.75
+            $res = wp_remote_post($url, [
+                'timeout' => 30,
+                'headers' => ['Content-Type' => 'application/json; charset=utf-8'],
+                'body'    => wp_json_encode([
+                    'input'       => ['text' => $j['text']],
+                    'voice'       => ['languageCode' => implode('-', array_slice(explode('-', $name), 0, 2)), 'name' => $name],
+                    'audioConfig' => ['audioEncoding' => 'MP3', 'sampleRateHertz' => 24000, 'speakingRate' => round($rate, 2)],
+                ]),
+            ]);
+            $code = is_wp_error($res) ? 0 : wp_remote_retrieve_response_code($res);
+            $data = is_wp_error($res) ? [] : (json_decode(wp_remote_retrieve_body($res), true) ?: []);
+            $mp3 = isset($data['audioContent']) ? base64_decode($data['audioContent'], true) : false;
+            if ($code === 200 && $mp3 && strlen($mp3) > 100 && file_put_contents($j['path'], $mp3)) {
+                $out['ok'][] = $j['path'];
+                continue;
+            }
+            $out['errors'][$j['path']] = is_wp_error($res) ? $res->get_error_message()
+                : 'Google HTTP ' . $code . ': ' . ($data['error']['message'] ?? 'không có audio');
+            if (in_array($code, [400, 401, 403], true) && !str_contains((string) ($data['error']['message'] ?? ''), 'input')) {
+                break;   // sai key / chưa bật API / chưa bật billing: dừng luôn
+            }
+        }
+        return $out;
     }
 
     private function azure(array $jobs): array
