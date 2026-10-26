@@ -51,20 +51,26 @@ final class TracksController
         }
         $settings = Settings::forRequest($req->get_params());
         $built = (new PlaylistService($tracks))->build($track['id'], $settings);
-        if (!$built || !$built['steps']) {
-            return new \WP_Error('hskn_no_audio', 'Bài này chưa có audio. Hãy chạy make_audio.py rồi import lại.', ['status' => 404]);
+        if (!$built || !$built['units']) {
+            return new \WP_Error('hskn_empty', 'Bài này chưa có nội dung.', ['status' => 404]);
         }
-        try {
-            $audio = (new AudioRenderer())->render($track['id'], $built['steps']);
-        } catch (\RuntimeException $e) {
-            return new \WP_Error('hskn_render', $e->getMessage(), ['status' => 500]);
+        // Có clip thì ghép MP3; thiếu clip (hoặc ghép lỗi) thì trình phát dùng bản "speech" đọc bằng giọng của máy.
+        $audio = null;
+        if ($built['steps']) {
+            try {
+                $audio = (new AudioRenderer())->render($track['id'], $built['steps']);
+            } catch (\RuntimeException) {
+                $audio = null;
+            }
         }
         $res = new \WP_REST_Response([
             'track'    => $track,
             'settings' => $settings,
-            'audio'    => ['src' => $audio['src'], 'duration_ms' => $audio['duration_ms'], 'bytes' => $audio['bytes']],
+            'audio'    => $audio ? ['src' => $audio['src'], 'duration_ms' => $audio['duration_ms'], 'bytes' => $audio['bytes']] : null,
             'units'    => $built['units'],
-            'cues'     => $audio['cues'],
+            'cues'     => $audio['cues'] ?? [],
+            'speech'   => $built['speech'],
+            'missing'  => $built['missing'],
         ]);
         $res->header('Cache-Control', 'no-store');
         return $res;

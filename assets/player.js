@@ -44,6 +44,157 @@
     return URL.createObjectURL(new Blob([all], { type: 'audio/mpeg' }));
   }
 
+  /*
+   * Đọc bằng giọng có sẵn của máy (Web Speech API) khi bài chưa có file audio — không cần API nào.
+   * Giả lập giao diện của <audio> (play, pause, currentTime, duration, playbackRate, các sự kiện
+   * play / pause / timeupdate / ended / loadedmetadata) nên trình phát dùng lại nguyên logic cue, tua, chuyển bài.
+   * Thời gian là ước lượng theo số chữ. Trình duyệt ngừng đọc khi khoá màn hình → giữ màn hình sáng (Wake Lock).
+   */
+  const LANG = { zh: 'zh-CN', vi: 'vi-VN', en: 'en-US' };
+  const speechOk = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+
+  function pickVoices() {
+    const all = speechOk ? window.speechSynthesis.getVoices() : [];
+    const good = /natural|online|neural|google|premium|enhanced|siri/i;
+    const of = (pre) => all.filter((v) => v.lang.replace('_', '-').toLowerCase().startsWith(pre))
+      .sort((a, b) => (good.test(b.name) ? 1 : 0) - (good.test(a.name) ? 1 : 0));
+    const zh = of('zh-cn').length ? of('zh-cn') : of('zh');
+    const male = zh.find((v) => /male|yunxi|yunyang|kangkang|yunjian|男/i.test(v.name) && !/female/i.test(v.name));
+    return { any: all.length > 0, zh: zh[0], zh_m: male || zh[1] || zh[0], vi: of('vi')[0], en: (of('en-us')[0] || of('en')[0]) };
+  }
+
+  class SpeechAudio extends EventTarget {
+    constructor(script, src) {
+      super();
+      this.src = src;
+      this.script = script;
+      this.paused = true;
+      this.i = 0;
+      this.gen = 0;
+      this._rate = 1;
+      this._t = 0;
+      this.voices = pickVoices();
+      if (speechOk) window.speechSynthesis.addEventListener('voiceschanged', () => { this.voices = pickVoices(); });
+      // dòng thời gian ước lượng: chữ Hán ~ 0,26 s/chữ, Việt/Anh ~ 0,065 s/ký tự
+      let t = 0;
+      this.times = [];
+      this.cues = [];
+      script.forEach((s) => {
+        this.times.push(t);
+        if (s.p != null) { t += s.p; return; }
+        this.cues.push([Math.round(t), s.u, s.k]);
+        t += 300 + (s.l === 'zh' ? 260 : 65) * [...s.t].length / (s.r || 1);
+      });
+      this.total = t;
+      this.duration = t / 1000;
+      setTimeout(() => this.emit('loadedmetadata'), 0);
+    }
+
+    emit(name) { this.dispatchEvent(new Event(name)); }
+    load() {}
+    get playbackRate() { return this._rate; }
+    set playbackRate(r) { this._rate = r; this.emit('ratechange'); }
+    get currentTime() { return this._t / 1000; }
+    set currentTime(sec) {
+      const ms = Math.max(0, sec * 1000) + 2;   // cue đã làm tròn tới ms → cho lệch một chút để không rơi vào khoảng lặng phía trước
+      let i = 0;
+      while (i + 1 < this.times.length && this.times[i + 1] <= ms) i++;
+      this.i = i;
+      this._t = this.times[i] || 0;
+      if (!this.paused) this.run();
+      this.emit('timeupdate');
+    }
+
+    play() {
+      if (!speechOk) return Promise.reject(new Error('Trình duyệt này không có giọng đọc.'));
+      if (this.paused) {
+        if (this.i >= this.script.length) { this.i = 0; this._t = 0; }
+        this.paused = false;
+        this.emit('play');
+        this.wake(true);
+        this.run();
+      }
+      return Promise.resolve();
+    }
+
+    pause() {
+      if (this.paused) return;
+      this.paused = true;
+      this.stop();
+      this.wake(false);
+      this.emit('pause');
+    }
+
+    dispose() {
+      this.paused = true;
+      this.stop();
+      this.wake(false);
+    }
+
+    stop() {
+      this.gen++;
+      clearTimeout(this.timer);
+      clearInterval(this.tick);
+      if (speechOk) window.speechSynthesis.cancel();
+    }
+
+    async wake(on) {
+      try {
+        if (on && 'wakeLock' in navigator && !this.lock) this.lock = await navigator.wakeLock.request('screen');
+        if (!on && this.lock) { await this.lock.release(); this.lock = null; }
+      } catch (e) { /* trình duyệt không hỗ trợ / chưa được phép */ }
+    }
+
+    run() {
+      this.stop();
+      const gen = this.gen;
+      const next = () => { if (gen === this.gen) { this.i++; step(); } };
+      const step = () => {
+        if (gen !== this.gen) return;
+        if (this.i >= this.script.length) {
+          this.paused = true;
+          this.wake(false);
+          clearInterval(this.tick);
+          this._t = this.total;
+          this.emit('timeupdate');
+          this.emit('pause');
+          this.emit('ended');
+          return;
+        }
+        const s = this.script[this.i];
+        this._t = this.times[this.i];
+        this.started = performance.now();
+        this.emit('timeupdate');
+        if (s.p != null) { this.timer = setTimeout(next, s.p / this._rate); return; }
+        const voice = s.l === 'zh' ? (s.v === 'm' ? this.voices.zh_m : this.voices.zh) : this.voices[s.l];
+        if (this.voices.any && !voice) { this.timer = setTimeout(next, 200); return; }   // máy không có giọng ngôn ngữ này
+        const u = new SpeechSynthesisUtterance(s.t);
+        u.lang = LANG[s.l];
+        if (voice) u.voice = voice;
+        u.rate = Math.max(0.5, Math.min(2, (s.r || 1) * this._rate));
+        u.onend = next;
+        u.onerror = next;
+        window.speechSynthesis.speak(u);
+        // Chrome đôi khi không bắn onend → canh giờ: quá 3 lần thời lượng ước tính thì bỏ qua câu này
+        const idx = this.i;
+        const est = (this.times[idx + 1] ?? this.total) - this.times[idx];
+        this.timer = setTimeout(() => {
+          if (gen !== this.gen || this.i !== idx) return;
+          window.speechSynthesis.cancel();
+          setTimeout(() => { if (gen === this.gen && this.i === idx) next(); }, 300);
+        }, est * 3 / this._rate + 4000);
+      };
+      // nội suy currentTime trong lúc đang đọc để thanh tiến độ chạy mượt
+      this.tick = setInterval(() => {
+        if (this.paused || this.started == null) return;
+        const end = this.times[this.i + 1] ?? this.total;
+        this._t = Math.min(end - 1, this.times[this.i] + (performance.now() - this.started) * this._rate);
+        this.emit('timeupdate');
+      }, 300);
+      step();
+    }
+  }
+
   function Player(root) {
     const cfg = JSON.parse(root.dataset.config);
     const saved = storage.read();
@@ -66,10 +217,14 @@
       pos: saved.pos || {},
       lastSave: 0,
       tab: saved.tab || 'topics',
+      forceSpeech: {},     // bài có file MP3 lỗi → đọc bằng giọng máy
+      speechWarm: false,
     };
-    const audio = new Audio();
-    audio.preload = 'auto';
-    root.hskn = { audio, st };   // để debug trong console
+    // `audio` là phần tử <audio> thật (bài có đủ clip) hoặc SpeechAudio (đọc bằng giọng của máy)
+    const realAudio = new Audio();
+    realAudio.preload = 'auto';
+    let audio = realAudio;
+    root.hskn = { get audio() { return audio; }, st };   // để debug trong console
     let pendingSeek = null;
     let pendingPlay = false;
 
@@ -156,10 +311,39 @@
     // Gọi ĐỒNG BỘ trong cú chạm trước khi chuyển bài (fetch xong mới play() thì iOS coi là tự phát và chặn).
     // Nút ▶ không cần: bản thân play() trong cú chạm đã mở khoá phần tử audio.
     function unlock() {
+      warmSpeech();
       if (st.unlocked) return;
       st.unlocked = true;
-      audio.src = silentUrl();
-      audio.play().catch(() => {});
+      if (audio === realAudio) {
+        realAudio.src = silentUrl();
+        realAudio.play().catch(() => {});
+      }
+    }
+
+    // iOS chỉ cho đọc giọng máy nếu lần đọc đầu tiên nằm trong cú chạm của người dùng
+    function warmSpeech() {
+      if (!speechOk || st.speechWarm) return;
+      st.speechWarm = true;
+      const u = new SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      window.speechSynthesis.speak(u);
+    }
+
+    // Chọn cách phát cho bài vừa tải: MP3 ghép sẵn nếu đủ clip, ngược lại đọc bằng giọng của máy.
+    function useMedia(pl, id) {
+      const speech = !pl.audio || pl.missing > 0 || st.forceSpeech[id];
+      if (audio !== realAudio) audio.dispose();
+      if (!speech) {
+        audio = realAudio;
+        return false;
+      }
+      realAudio.pause();
+      const sp = new SpeechAudio(pl.speech, 'speech:' + id + ':' + Date.now());
+      bindMedia(sp);
+      audio = sp;
+      pl.audio = { src: sp.src, duration_ms: sp.total };
+      pl.cues = sp.cues;
+      return true;
     }
 
     async function load(id, opts = {}) {
@@ -169,7 +353,9 @@
       ui.play.classList.add('is-busy');
       say('');
       try {
-        const pl = await getPlaylist(id);
+        // bản sao: useMedia() sửa audio/cues của playlist, không được làm hỏng bản trong cache prefetch
+        const pl = Object.assign({}, await getPlaylist(id));
+        const speech = useMedia(pl, id);
         st.pl = pl;
         st.track = Object.assign({}, track, pl.track);
         st.order = [];
@@ -186,8 +372,13 @@
         pendingSeek = at > 0 ? at : null;
         pendingPlay = !!opts.autoplay || !!st.wantPlay;
         st.wantPlay = false;
-        audio.src = pl.audio.src;
-        audio.load();
+        if (!speech) {
+          audio.src = pl.audio.src;
+          audio.load();
+        }
+        say(speech ? (speechOk
+          ? `Đang đọc bằng giọng của máy${pl.missing ? ` (${pl.missing} mục chưa có file giọng đọc)` : ''} — giữ màn hình sáng khi nghe.`
+          : 'Bài này chưa có file giọng đọc và trình duyệt không hỗ trợ đọc bằng giọng máy.') : '');
         ui.title.textContent = st.track.title;
         ui.sub.textContent = st.track.subtitle;
         ui.dur.textContent = fmt(pl.audio.duration_ms / 1000);
@@ -208,30 +399,45 @@
       }
     }
 
-    audio.addEventListener('loadedmetadata', () => {
-      audio.playbackRate = st.speed;
-      if (pendingSeek != null) {
-        try { audio.currentTime = pendingSeek; } catch (e) { /* bỏ qua */ }
-        pendingSeek = null;
-      }
-      if (pendingPlay) {
-        pendingPlay = false;
-        audio.play().catch(() => say('Bấm ▶ để phát.'));
-      }
-      updatePosition();
-    });
-    audio.addEventListener('play', () => { ui.play.innerHTML = svg('pause'); ui.play.setAttribute('aria-label', 'Tạm dừng'); setState('playing'); });
-    audio.addEventListener('pause', () => { ui.play.innerHTML = svg('play'); ui.play.setAttribute('aria-label', 'Phát'); setState('paused'); savePos(true); });
-    audio.addEventListener('emptied', () => { ui.play.innerHTML = svg('play'); ui.play.setAttribute('aria-label', 'Phát'); });
-    audio.addEventListener('ratechange', updatePosition);
-    audio.addEventListener('error', () => { if (st.pl && audio.src === st.pl.audio.src) say('Không tải được file audio.'); });
-    audio.addEventListener('timeupdate', onTime);
-    audio.addEventListener('ended', () => {
-      if (!isTrackSrc()) return;
-      st.pos[st.track.id] = 0;
-      persist();
-      if (st.auto && st.track.next) load(st.track.next, { autoplay: true });
-    });
+    // Gắn sự kiện cho <audio> thật và cho mỗi SpeechAudio (cùng một bộ xử lý).
+    // Sự kiện của nguồn không còn được dùng bị bỏ qua (target !== audio).
+    function bindMedia(m) {
+      const on = (name, fn) => m.addEventListener(name, (e) => { if (m === audio) fn(e); });
+      on('loadedmetadata', () => {
+        audio.playbackRate = st.speed;
+        if (pendingSeek != null) {
+          try { audio.currentTime = pendingSeek; } catch (e) { /* bỏ qua */ }
+          pendingSeek = null;
+        }
+        if (pendingPlay) {
+          pendingPlay = false;
+          audio.play().catch(() => say('Bấm ▶ để phát.'));
+        }
+        updatePosition();
+      });
+      on('play', () => { ui.play.innerHTML = svg('pause'); ui.play.setAttribute('aria-label', 'Tạm dừng'); setState('playing'); });
+      on('pause', () => { ui.play.innerHTML = svg('play'); ui.play.setAttribute('aria-label', 'Phát'); setState('paused'); savePos(true); });
+      on('emptied', () => { ui.play.innerHTML = svg('play'); ui.play.setAttribute('aria-label', 'Phát'); });
+      on('ratechange', updatePosition);
+      on('error', () => {
+        // file MP3 hỏng / bị xoá → đọc bằng giọng máy thay vì im lặng
+        if (!st.pl || audio.src !== st.pl.audio.src || !st.track) return;
+        if (st.pl.speech && st.pl.speech.length && !st.forceSpeech[st.track.id]) {
+          st.forceSpeech[st.track.id] = true;
+          load(st.track.id, { autoplay: true, time: audio.currentTime });
+        } else {
+          say('Không tải được file audio.');
+        }
+      });
+      on('timeupdate', onTime);
+      on('ended', () => {
+        if (!isTrackSrc()) return;
+        st.pos[st.track.id] = 0;
+        persist();
+        if (st.auto && st.track.next) load(st.track.next, { autoplay: true });
+      });
+    }
+    bindMedia(realAudio);
 
     // false khi đang phát clip im lặng dùng để mở khoá, hoặc file của bài cũ chưa kịp đổi
     function isTrackSrc() {
@@ -368,7 +574,7 @@
       }
       const current = st.track && st.track.id;
       const btn = (t, label, small) => `<button class="hk-track${t.id === current ? ' is-current' : ''}" data-track="${esc(t.id)}"
-          ${t.playable ? '' : 'disabled title="Chưa có audio"'}>${label}${small ? ` <small>${esc(small)}</small>` : ''}</button>`;
+          ${t.items ? '' : 'disabled title="Chưa có nội dung"'} ${t.playable < t.items ? 'title="Một số mục chưa có file giọng đọc: sẽ đọc bằng giọng của máy"' : ''}>${label}${small ? ` <small>${esc(small)}</small>` : ''}${t.items && t.playable < t.items ? ' <small>· giọng máy</small>' : ''}</button>`;
       // Map giữ đúng thứ tự server trả về (object sẽ đưa khoá "10", "11" lên trước "01")
       const map = new Map();
       tracks.forEach((t) => { if (!map.has(t.group)) map.set(t.group, []); map.get(t.group).push(t); });
@@ -528,7 +734,7 @@
             unlock();
             st.wantPlay = true;
             ui.play.classList.add('is-busy');
-            if (!st.loading) { const first = st.tracks.find((x) => x.playable); if (first) load(first.id, { autoplay: true }); }
+            if (!st.loading) { const first = st.tracks.find((x) => x.items); if (first) load(first.id, { autoplay: true }); }
             return;
           }
           st.unlocked = true;
@@ -572,8 +778,8 @@
       st.tracks = tracks;
       topics.forEach((t) => { st.topics[t.id] = t; });
       renderLibrary();
-      const want = [cfg.track, saved.track].find((id) => id && tracks.some((t) => t.id === id && t.playable));
-      const scoped = tracks.filter((t) => t.playable && (!cfg.group || t.group === cfg.group));
+      const want = [cfg.track, saved.track].find((id) => id && tracks.some((t) => t.id === id && t.items));
+      const scoped = tracks.filter((t) => t.items && (!cfg.group || t.group === cfg.group));
       const id = want && (!cfg.group || tracks.find((t) => t.id === want).group === cfg.group) ? want : (scoped[0] && scoped[0].id);
       if (id) load(id, { resume: true });
     }).catch((e) => {

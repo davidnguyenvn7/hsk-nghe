@@ -13,6 +13,7 @@ use HSKN\Rest\WordsController;
 use HSKN\Shortcode\Player;
 use HSKN\Support\Cache;
 use HSKN\Support\Settings;
+use HSKN\Support\Updater;
 
 defined('ABSPATH') || exit;
 
@@ -39,6 +40,7 @@ final class Plugin
         });
 
         (new Player())->register();
+        (new Updater())->register();   // chạy cả trong cron (WP kiểm tra cập nhật nền), không chỉ trong admin
 
         if (is_admin()) {
             (new AdminPages())->register();

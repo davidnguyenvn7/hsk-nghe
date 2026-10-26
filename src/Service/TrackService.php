@@ -98,11 +98,11 @@ final class TrackService
         return null;
     }
 
-    /** Bài trước/sau có audio (bỏ qua bài chưa có clip nào). */
+    /** Bài trước/sau có nội dung (bài thiếu clip vẫn nghe được bằng giọng của máy). */
     private function neighbour(array $all, int $i, int $dir): ?string
     {
         for ($j = $i + $dir; $j >= 0 && $j < count($all); $j += $dir) {
-            if ($all[$j]['playable'] > 0) {
+            if ($all[$j]['items'] > 0) {
                 return $all[$j]['id'];
             }
         }
