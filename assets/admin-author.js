@@ -213,29 +213,37 @@
   async function audio() {
     const bar = root.querySelector('progress');
     let first = null, made = 0, stuck = 0;
+    // Chưa có key giọng đọc / dịch vụ lỗi: nội dung ĐÃ lưu, trình phát tự đọc bằng giọng của máy → không coi là lỗi
+    const fallback = (why) => {
+      if (bar) bar.remove();
+      setBusy(false, '');
+      finish(notice('info', `Chưa tạo được file giọng đọc: ${esc(why)}<br>
+        Bạn vẫn nghe được ngay — trình phát sẽ <strong>đọc bằng giọng có sẵn của điện thoại/máy tính</strong>.
+        Khi đã nhập key giọng đọc ở <a href="${esc(C.settings)}#api">Cài đặt</a>, vào <em>Quản lý nội dung</em> bấm <strong>Tạo giọng đọc</strong>.`));
+    };
     for (;;) {
       setBusy(true, `Đang tạo giọng đọc… đã tạo ${made} clip`);
       let res;
       try {
         res = await api('POST', '/audio');
       } catch (e) {
-        setBusy(false, 'Lỗi: ' + e.message);
-        return;
+        return fallback(e.message);
       }
       made += res.made;
       first = first ?? res.remaining + res.made + res.reused;
       if (bar && first) bar.value = Math.round(100 * (first - res.remaining) / first);
       if (res.remaining === 0) break;
       stuck = res.made + res.reused === 0 ? stuck + 1 : 0;
-      if (stuck >= 2) {
-        setBusy(false, 'Dừng vì lỗi: ' + (res.errors || []).join(' · '));
-        return;
-      }
+      if (stuck >= 2) return fallback((res.errors || []).join(' · ') || 'dịch vụ giọng đọc không phản hồi');
     }
     setBusy(false, `Xong: tạo ${made} clip mới.`);
+    finish('');
+  }
+
+  function finish(html) {
     const id = st.saved ? st.saved.topic_id : '';
     const done = root.querySelector('.hskn-done') || root;
-    done.insertAdjacentHTML('beforeend', `<p>${id ? `<a class="button button-primary" target="_blank" href="${esc(C.player)}${C.player.includes('?') ? '&' : '?'}track=words-${esc(id)}-01">Nghe thử chủ đề ${esc(id)}</a> ` : ''}
+    done.insertAdjacentHTML('beforeend', `${html}<p>${id ? `<a class="button button-primary" target="_blank" href="${esc(C.player)}${C.player.includes('?') ? '&' : '?'}track=words-${esc(id)}-01">Nghe thử chủ đề ${esc(id)}</a> ` : ''}
       <button class="button" data-a="restart">Thêm nội dung khác</button></p>`);
   }
 

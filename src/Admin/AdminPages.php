@@ -148,7 +148,8 @@ final class AdminPages
                 <button class="button">Tải lên</button>
                 <span class="description">Tối đa <?php echo esc_html(size_format($max)); ?>.</span>
             </form>
-            <p class="description">Gói lớn hơn giới hạn: tạo bằng <code>python scripts/pack.py</code> (zip) hoặc <code>--dir</code> (thư mục), rồi upload qua SFTP vào<br>
+            <p class="description"><strong>File gói lớn hơn giới hạn trên</strong> (ví dụ gói đầy đủ có audio ~220 MB): dùng <strong>File Manager</strong> của hosting
+                (hoặc FileZilla/SFTP) để upload file <code>hskn-pack-….zip</code> vào thư mục dưới đây, rồi tải lại trang này:<br>
                 <code><?php echo esc_html(Paths::incoming()); ?></code></p>
 
             <h2>2. Chọn gói để import</h2>
