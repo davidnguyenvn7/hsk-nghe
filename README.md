@@ -5,6 +5,8 @@ Nghe thụ động từ vựng HSK 3.0 cấp 2–3 và mẫu câu theo chủ đ�
 - **Trình phát mobile**: mỗi bài là một file MP3 do server ghép sẵn theo cài đặt, nên vẫn phát khi khoá màn hình. Có điều khiển trên màn hình khoá và tai nghe, tự chuyển sang bài kế tiếp.
 - **Thứ tự nghe tuỳ chỉnh**: từ × N lần → nghĩa (Việt / Anh / không đọc) → mỗi câu: câu → nghĩa → câu chậm × (M − 1).
 - **Thêm nội dung bằng DeepSeek** ngay trong WP Admin: chủ đề mới, từ mới, câu theo từ. Câu sinh ra được kiểm tra chỉ dùng từ HSK 1–3, rồi bạn duyệt trước khi lưu.
+- **Không có API vẫn nghe được**: bài nào thiếu file giọng đọc thì trình phát đọc bằng giọng có sẵn của điện thoại/máy tính (Web Speech API). Cần giữ màn hình sáng.
+- **Tự cập nhật từ GitHub**: trang Plugins hiện "Có bản cập nhật", bấm Update như plugin thường.
 - **Quản lý nội dung**: sửa và ẩn chủ đề, từ, câu. Giọng đọc (Google Cloud Text-to-Speech hoặc Azure Speech) được tạo lại cho đúng phần đã sửa.
 
 ## Cài đặt
@@ -13,6 +15,11 @@ Nghe thụ động từ vựng HSK 3.0 cấp 2–3 và mẫu câu theo chủ đ�
 2. **HSK Nghe → Import**: import gói nội dung `hskn-pack-*.zip` (tạo bằng repo [hsk-nghe-thu-dong](https://github.com/davidnguyenvn7/hsk-nghe-thu-dong)). Gói lớn thì upload vào `wp-content/uploads/hskn/incoming/` qua SFTP hoặc File Manager.
 3. **HSK Nghe → Cài đặt**: nhập DeepSeek API key và Google Cloud API key (Text-to-Speech), rồi chọn cách đọc mặc định.
 4. Tạo một trang có shortcode `[hskn_player]`.
+
+## Cập nhật
+
+Plugin tự kiểm tra phiên bản trên nhánh `main` của repo này (6 giờ/lần, hoặc bấm **Kiểm tra cập nhật** ở dòng plugin trong trang Plugins).
+Phát hành bản mới: tăng `Version:` và `HSKN_VERSION` trong `hsk-nghe.php`, rồi push lên `main`.
 
 ## Shortcode
 
