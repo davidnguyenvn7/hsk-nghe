@@ -39,6 +39,15 @@ final class Player
         ];
 
         $ver = static fn(string $f) => HSKN_VERSION . '.' . (int) @filemtime(HSKN_DIR . $f);
+        // Admin: nút "Tạo chủ đề" ngay trên trình phát. Script trình tạo chỉ được tải khi bấm.
+        if (current_user_can('manage_options')) {
+            $config['author'] = [
+                'rest'     => esc_url_raw(rest_url('hskn/v1/admin/author')),
+                'script'   => esc_url_raw(add_query_arg('ver', $ver('assets/admin-author.js'), HSKN_URL . 'assets/admin-author.js')),
+                'settings' => esc_url_raw(admin_url('admin.php?page=hskn-settings')),
+                'manage'   => esc_url_raw(admin_url('admin.php?page=hskn-content')),
+            ];
+        }
         wp_enqueue_style('hskn-player', HSKN_URL . 'assets/player.css', [], $ver('assets/player.css'));
         wp_enqueue_script('hskn-player', HSKN_URL . 'assets/player.js', [], $ver('assets/player.js'), ['in_footer' => true, 'strategy' => 'defer']);
 

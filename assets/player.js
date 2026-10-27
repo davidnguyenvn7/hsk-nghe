@@ -17,6 +17,8 @@
     tune: 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z',
     list: 'M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z',
     loop: 'M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z',
+    add: 'M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z',
+    close: 'M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6z',
   };
   const SPEEDS = [0.75, 0.9, 1, 1.15, 1.3];
   const STORE = 'hskn:v1';
@@ -239,6 +241,7 @@
       <section class="hk-player" aria-label="Trình phát">
         <div class="hk-head">
           <div class="hk-head-text"><div class="hk-title">Chọn bài nghe</div><div class="hk-sub"></div></div>
+          ${cfg.author ? `<button class="hk-icon" data-act="author" title="Tạo chủ đề" aria-label="Tạo chủ đề">${svg('add')}</button>` : ''}
           <button class="hk-icon" data-act="settings" title="Cài đặt nghe" aria-label="Cài đặt nghe">${svg('tune')}</button>
           <button class="hk-icon" data-act="library" title="Danh sách bài" aria-label="Danh sách bài">${svg('list')}</button>
         </div>
@@ -272,14 +275,31 @@
         <div class="hk-msg" role="status"></div>
       </section>
       <section class="hk-lib" aria-label="Danh sách bài nghe"></section>
-      <dialog class="hk-sheet"></dialog>`;
+      <div class="hk-mini" hidden>
+        <button class="hk-mini-text" data-act="to-player" aria-label="Mở trình phát"><b></b><span></span></button>
+        <button class="hk-mini-btn" data-act="toggle" aria-label="Phát">${svg('play')}</button>
+        <button class="hk-mini-btn" data-act="next" aria-label="Mục sau">${svg('next')}</button>
+      </div>
+      <dialog class="hk-sheet"></dialog>
+      ${cfg.author ? `<dialog class="hk-dlg" aria-label="Tạo chủ đề">
+        <div class="hk-dlg-head"><strong>Tạo chủ đề</strong>
+          <a class="hk-dlg-link" href="${esc(cfg.author.manage)}">Quản lý nội dung</a>
+          <button class="hk-icon" data-dlg="close" aria-label="Đóng" autofocus>${svg('close')}</button></div>
+        <div class="hk-dlg-body hk-author"><div class="hk-empty">Đang tải…</div></div>
+      </dialog>` : ''}`;
 
     const $ = (s) => root.querySelector(s);
     const ui = {
       title: $('.hk-title'), sub: $('.hk-sub'), stage: $('.hk-stage'), parent: $('.hk-parent'), zh: $('.hk-zh'),
       py: $('.hk-py'), mean: $('.hk-mean'), tags: $('.hk-tags'), cur: $('.hk-cur'), dur: $('.hk-dur'),
       range: $('.hk-seek input'), count: $('.hk-count'), play: $('.hk-play'), speed: $('.hk-speed'),
-      msg: $('.hk-msg'), lib: $('.hk-lib'), sheet: $('.hk-sheet'),
+      msg: $('.hk-msg'), lib: $('.hk-lib'), sheet: $('.hk-sheet'), player: $('.hk-player'),
+      mini: $('.hk-mini'), miniZh: $('.hk-mini-text b'), miniSub: $('.hk-mini-text span'), miniPlay: $('.hk-mini [data-act="toggle"]'),
+      dlg: $('.hk-dlg'), dlgBody: $('.hk-dlg-body'),
+    };
+    const setPlayIcon = (playing) => {
+      [ui.play, ui.miniPlay].forEach((b) => { b.innerHTML = svg(playing ? 'pause' : 'play'); b.setAttribute('aria-label', playing ? 'Tạm dừng' : 'Phát'); });
+      root.classList.toggle('is-playing', playing);
     };
 
     // ------------------------------------------------------------ data
@@ -348,9 +368,12 @@
 
     async function load(id, opts = {}) {
       const track = st.tracks.find((t) => t.id === id);
-      if (!track || st.loading) return;
+      if (!track) return;
+      // đang tải bài khác → nhớ bài bấm sau cùng, tải xong bài này sẽ chuyển sang
+      if (st.loading) { st.queued = [id, opts]; showPending(track); return; }
       st.loading = true;
       ui.play.classList.add('is-busy');
+      showPending(track);
       say('');
       try {
         // bản sao: useMedia() sửa audio/cues của playlist, không được làm hỏng bản trong cache prefetch
@@ -383,8 +406,8 @@
         ui.sub.textContent = st.track.subtitle;
         ui.dur.textContent = fmt(pl.audio.duration_ms / 1000);
         renderUnit(st.order.length ? st.order[0].u : -1, null);
-        renderLibrary();
         updateBar();
+        syncMini();
         persist();
         try {
           const url = new URL(location.href);
@@ -393,10 +416,24 @@
         } catch (e) { /* bỏ qua */ }
       } catch (e) {
         say(e.message);
+        if (st.track) { ui.title.textContent = st.track.title; ui.sub.textContent = st.track.subtitle; }
       } finally {
+        st.pending = null;
         st.loading = false;
         ui.play.classList.remove('is-busy');
+        ui.player.classList.remove('is-switching');
+        if (st.queued) { const [qid, qopts] = st.queued; st.queued = null; load(qid, qopts); }
+        else renderLibrary();
       }
+    }
+
+    // Phản hồi ngay khi bấm chọn bài (server có thể mất vài giây để ghép MP3)
+    function showPending(track) {
+      st.pending = track.id;
+      ui.player.classList.add('is-switching');
+      ui.title.textContent = track.title;
+      ui.sub.textContent = 'Đang tải bài…';
+      ui.lib.querySelectorAll('.hk-track').forEach((b) => b.classList.toggle('is-loading', b.dataset.track === track.id));
     }
 
     // Gắn sự kiện cho <audio> thật và cho mỗi SpeechAudio (cùng một bộ xử lý).
@@ -415,9 +452,9 @@
         }
         updatePosition();
       });
-      on('play', () => { ui.play.innerHTML = svg('pause'); ui.play.setAttribute('aria-label', 'Tạm dừng'); setState('playing'); });
-      on('pause', () => { ui.play.innerHTML = svg('play'); ui.play.setAttribute('aria-label', 'Phát'); setState('paused'); savePos(true); });
-      on('emptied', () => { ui.play.innerHTML = svg('play'); ui.play.setAttribute('aria-label', 'Phát'); });
+      on('play', () => { setPlayIcon(true); setState('playing'); });
+      on('pause', () => { setPlayIcon(false); setState('paused'); savePos(true); });
+      on('emptied', () => setPlayIcon(false));
       on('ratechange', updatePosition);
       on('error', () => {
         // file MP3 hỏng / bị xoá → đọc bằng giọng máy thay vì im lặng
@@ -533,6 +570,11 @@
         if (parent) ui.parent.innerHTML = `<b>${esc(parent.zh)}</b> ${esc(parent.pinyin)}`;
         renderCount(u);
         updateMedia(unit);
+        ui.miniZh.textContent = unit.zh;
+        ui.miniSub.textContent = `${unit.pinyin || ''} · ${st.track.title}`;
+        ui.stage.classList.remove('hk-in');
+        void ui.stage.offsetWidth;   // chạy lại hiệu ứng hiện chữ
+        ui.stage.classList.add('hk-in');
       }
       ui.zh.classList.toggle('is-on', kind === 'word' || kind === 'zh' || kind === 'zh_slow');
       ui.mean.classList.toggle('is-on', kind === 'vi' || kind === 'en');
@@ -568,13 +610,16 @@
 
     function renderLibrary() {
       const tracks = st.tracks.filter((t) => !cfg.group || t.group === cfg.group);
+      const add = cfg.author ? `<button class="hk-new" data-act="author">${svg('add')} Tạo chủ đề mới</button>` : '';
       if (!tracks.length) {
-        ui.lib.innerHTML = '<div class="hk-empty">Chưa có bài nghe nào. Hãy import gói nội dung trong trang quản trị.</div>';
+        ui.lib.innerHTML = '<div class="hk-empty">Chưa có bài nghe nào. Hãy import gói nội dung trong trang quản trị.</div>' + add;
         return;
       }
       const current = st.track && st.track.id;
-      const btn = (t, label, small) => `<button class="hk-track${t.id === current ? ' is-current' : ''}" data-track="${esc(t.id)}"
-          ${t.items ? '' : 'disabled title="Chưa có nội dung"'} ${t.playable < t.items ? 'title="Một số mục chưa có file giọng đọc: sẽ đọc bằng giọng của máy"' : ''}>${label}${small ? ` <small>${esc(small)}</small>` : ''}${t.items && t.playable < t.items ? ' <small>· giọng máy</small>' : ''}</button>`;
+      const eq = '<span class="hk-eq" aria-hidden="true"><i></i><i></i><i></i></span>';
+      const btn = (t, label, small) => `<button class="hk-track${t.id === current ? ' is-current' : ''}${t.id === st.pending ? ' is-loading' : ''}" data-track="${esc(t.id)}"
+          ${t.id === current ? 'aria-current="true"' : ''}
+          ${t.items ? '' : 'disabled title="Chưa có nội dung"'} ${t.playable < t.items ? 'title="Một số mục chưa có file giọng đọc: sẽ đọc bằng giọng của máy"' : ''}>${t.id === current ? eq : ''}${label}${small ? ` <small>${esc(small)}</small>` : ''}${t.items && t.playable < t.items ? ' <small>· giọng máy</small>' : ''}</button>`;
       // Map giữ đúng thứ tự server trả về (object sẽ đưa khoá "10", "11" lên trước "01")
       const map = new Map();
       tracks.forEach((t) => { if (!map.has(t.group)) map.set(t.group, []); map.get(t.group).push(t); });
@@ -588,12 +633,13 @@
 
       let body = '';
       if (st.tab === 'topics') {
-        body = topicIds.map((g) => {
+        body = add + topicIds.map((g) => {
           const info = st.topics[g] || {};
           const items = groups[g].map((t) => t.type === 'topic'
             ? btn(t, 'Mẫu câu', `${t.items} câu`)
             : btn(t, esc(t.subtitle), `${t.items} từ`)).join('');
-          return `<div class="hk-topic"><div class="hk-topic-head"><span class="hk-topic-id">${esc(g)}</span>
+          const on = groups[g].some((t) => t.id === current);
+          return `<div class="hk-topic${on ? ' has-current' : ''}"><div class="hk-topic-head"><span class="hk-topic-id">${esc(g)}</span>
               <span class="hk-topic-name">${esc(info.name_vi || groups[g][0].title)}</span>
               <span class="hk-topic-zh">${esc(info.name_zh || '')}</span></div>
               ${info.description ? `<div class="hk-topic-desc">${esc(info.description)}</div>` : ''}
@@ -719,11 +765,16 @@
     root.addEventListener('click', (e) => {
       const t = e.target.closest('button');
       if (!t || ui.sheet.contains(t)) return;
+      if (ui.dlg && ui.dlg.contains(t)) { if (t.dataset.dlg === 'close') ui.dlg.close(); return; }
       if (t.dataset.track) {
         unlock();
-        if (st.track && t.dataset.track === st.track.id) { audio.play().catch(() => {}); return; }
+        // bấm lại bài đang phát = tạm dừng / phát tiếp
+        if (st.track && t.dataset.track === st.track.id && !st.loading) {
+          if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+          return;
+        }
         load(t.dataset.track, { autoplay: true, resume: true });
-        root.querySelector('.hk-player').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        ui.player.scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
       }
       if (t.dataset.tab) { st.tab = t.dataset.tab; persist(); renderLibrary(); return; }
@@ -755,6 +806,8 @@
         case 'track-next': if (st.track && st.track.next) { unlock(); load(st.track.next, { autoplay: !audio.paused }); } break;
         case 'settings': openSettings(); break;
         case 'library': ui.lib.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
+        case 'to-player': ui.player.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
+        case 'author': openAuthor(); break;
       }
     });
     ui.range.addEventListener('input', () => {
@@ -764,7 +817,7 @@
     ui.range.addEventListener('change', () => seekTo((ui.range.value / 1000) * (audio.duration || 0)));
     // màn hình học trên máy tính: phím tắt
     document.addEventListener('keydown', (e) => {
-      if (e.target.closest('input, textarea, select, [contenteditable]') || ui.sheet.open || !st.pl) return;
+      if (e.target.closest('input, textarea, select, [contenteditable]') || ui.sheet.open || (ui.dlg && ui.dlg.open) || !st.pl) return;
       if (e.code === 'Space') { e.preventDefault(); st.unlocked = true; audio.paused ? audio.play() : audio.pause(); }
       else if (e.key === 'ArrowLeft') unitStep(-1);
       else if (e.key === 'ArrowRight') unitStep(1);
@@ -773,11 +826,64 @@
     window.addEventListener('pagehide', () => savePos(true));
 
     // ------------------------------------------------------------ start
+    // ------------------------------------------------------------ mini player: hiện ở đáy khi cuộn khỏi trình phát
+    let playerVisible = true;
+    const syncMini = () => {
+      const show = !playerVisible && !!st.pl;
+      ui.mini.hidden = !show;
+      root.classList.toggle('has-mini', show);
+    };
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(([en]) => { playerVisible = en.isIntersecting; syncMini(); }).observe(ui.player);
+    }
+
+    // ------------------------------------------------------------ tạo chủ đề ngay trên trang (chỉ admin)
+    let author = null;
+    let authorDirty = false;
+    function openAuthor() {
+      const a = cfg.author;
+      if (!a || !ui.dlg) return;
+      if (typeof ui.dlg.showModal === 'function') ui.dlg.showModal(); else ui.dlg.setAttribute('open', '');
+      if (author) return;
+      author = new Promise((ok, fail) => {
+        if (window.HSKNAuthor) return ok();
+        const s = document.createElement('script');
+        s.src = a.script;
+        s.onload = ok;
+        s.onerror = () => fail(new Error('Không tải được trình tạo chủ đề.'));
+        document.head.appendChild(s);
+      }).then(() => window.HSKNAuthor.mount(ui.dlgBody, {
+        rest: a.rest, nonce: cfg.nonce, settings: a.settings, player: location.origin + location.pathname,
+        onChange: () => { authorDirty = true; },
+        onListen: (id) => {
+          unlock();
+          ui.dlg.close();
+          refresh().then(() => load(id, { autoplay: true }));
+          ui.player.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        },
+      })).catch((e) => {
+        author = null;
+        ui.dlgBody.innerHTML = `<div class="hk-empty">${esc(e.message)}</div>`;
+      });
+    }
+    if (ui.dlg) ui.dlg.addEventListener('close', () => { if (authorDirty) refresh(); });
+
+    // tải (lại) danh sách bài — lúc mở trang và sau khi admin tạo / ẩn chủ đề
+    function refresh() {
+      authorDirty = false;
+      st.prefetch = {};
+      return Promise.all([api('tracks'), api('topics').catch(() => [])]).then(([tracks, topics]) => {
+        st.tracks = tracks;
+        topics.forEach((t) => { st.topics[t.id] = t; });
+        if (st.track) { const t = tracks.find((x) => x.id === st.track.id); if (t) Object.assign(st.track, { prev: t.prev, next: t.next }); }
+        renderLibrary();
+        updateBar();
+        return tracks;
+      });
+    }
+
     updateBar();
-    Promise.all([api('tracks'), api('topics').catch(() => [])]).then(([tracks, topics]) => {
-      st.tracks = tracks;
-      topics.forEach((t) => { st.topics[t.id] = t; });
-      renderLibrary();
+    refresh().then((tracks) => {
       const want = [cfg.track, saved.track].find((id) => id && tracks.some((t) => t.id === id && t.items));
       const scoped = tracks.filter((t) => t.items && (!cfg.group || t.group === cfg.group));
       const id = want && (!cfg.group || tracks.find((t) => t.id === want).group === cfg.group) ? want : (scoped[0] && scoped[0].id);

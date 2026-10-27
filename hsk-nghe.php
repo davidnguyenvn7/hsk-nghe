@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       HSK Nghe Thụ Động
  * Description:       Nghe thụ động từ vựng HSK 2–3 và mẫu câu theo chủ đề. Import gói nội dung (JSON + audio) từ repo hsk-nghe-thu-dong.
- * Version:           0.2.1
+ * Version:           0.3.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            HSK Nghe
@@ -13,7 +13,7 @@
 defined('ABSPATH') || exit;
 
 // Phát hành bản mới: tăng cả "Version:" ở trên và hằng số này, rồi push lên nhánh main (xem Support/Updater.php).
-define('HSKN_VERSION', '0.2.1');
+define('HSKN_VERSION', '0.3.0');
 define('HSKN_FILE', __FILE__);
 define('HSKN_DIR', plugin_dir_path(__FILE__));
 define('HSKN_URL', plugin_dir_url(__FILE__));

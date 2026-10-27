@@ -1,11 +1,11 @@
 /*
  * Trang "Thêm nội dung": 1. đề xuất từ → 2. duyệt từ → 3. sinh + duyệt câu → 4. lưu + tạo giọng đọc.
  * Mọi bước gọi REST hskn/v1/admin/author; sinh câu và tạo audio chạy theo lô nhỏ.
+ * Dùng ở trang Admin (#hskn-author) và ở trình phát ngoài trang (admin bấm "Tạo chủ đề"): HSKNAuthor.mount(el, config).
  */
 (function () {
   'use strict';
-  const C = window.HSKN_AUTHOR;
-  const root = document.getElementById('hskn-author');
+  function mount(root, C) {
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const st = { cfg: null, form: { mode: 'new', topic_id: '', name_vi: '', desc: '', count: 10, list: '', per_word: 2, max_len: 18 }, topic: null, words: [], tokens: 0, busy: false };
 
@@ -76,7 +76,7 @@
       html += `<h2>Chủ đề đã tạo trong WP</h2><table class="widefat striped" style="max-width:900px"><thead><tr><th>Mã</th><th>Chủ đề</th><th>Từ</th><th>Câu</th><th></th></tr></thead><tbody>
         ${c.wp_topics.map((t) => `<tr><td>${esc(t.id)}</td><td><strong>${esc(t.name_vi)}</strong> ${esc(t.name_zh)}<br><span class="description">${esc(t.description)}</span></td>
           <td>${t.words}</td><td>${t.sentences}</td><td style="text-align:right">
-          <a class="button" href="${esc(C.player)}${C.player.includes('?') ? '&' : '?'}track=words-${esc(t.id)}-01" target="_blank">Nghe</a>
+          <a class="button" href="${esc(C.player)}${C.player.includes('?') ? '&' : '?'}track=words-${esc(t.id)}-01" target="_blank" data-listen="words-${esc(t.id)}-01">Nghe</a>
           <button class="button" data-a="more" data-id="${esc(t.id)}">Thêm từ</button>
           <button class="button-link-delete button-link" data-a="hide" data-id="${esc(t.id)}">Ẩn</button></td></tr>`).join('')}
         </tbody></table>`;
@@ -199,6 +199,7 @@
       }));
       const res = await api('POST', '/save', { topic: st.topic, words });
       st.saved = res;
+      if (C.onChange) C.onChange();
       root.innerHTML = `<h2>4. Tạo giọng đọc</h2>
         ${notice('success', `Đã lưu chủ đề <strong>${esc(res.topic_id)}</strong>: thêm ${res.words} từ, ${res.sentences} câu.`)}
         ${res.skipped.length ? notice('warning', 'Bỏ qua: ' + res.skipped.map(esc).join('<br>')) : ''}
@@ -237,13 +238,14 @@
       if (stuck >= 2) return fallback((res.errors || []).join(' · ') || 'dịch vụ giọng đọc không phản hồi');
     }
     setBusy(false, `Xong: tạo ${made} clip mới.`);
+    if (C.onChange) C.onChange();
     finish('');
   }
 
   function finish(html) {
     const id = st.saved ? st.saved.topic_id : '';
     const done = root.querySelector('.hskn-done') || root;
-    done.insertAdjacentHTML('beforeend', `${html}<p>${id ? `<a class="button button-primary" target="_blank" href="${esc(C.player)}${C.player.includes('?') ? '&' : '?'}track=words-${esc(id)}-01">Nghe thử chủ đề ${esc(id)}</a> ` : ''}
+    done.insertAdjacentHTML('beforeend', `${html}<p>${id ? `<a class="button button-primary" target="_blank" data-listen="words-${esc(id)}-01" href="${esc(C.player)}${C.player.includes('?') ? '&' : '?'}track=words-${esc(id)}-01">Nghe thử chủ đề ${esc(id)}</a> ` : ''}
       <button class="button" data-a="restart">Thêm nội dung khác</button></p>`);
   }
 
@@ -262,6 +264,8 @@
     else if (t.dataset.t) st.topic[t.dataset.t] = t.value;
   });
   root.addEventListener('click', async (e) => {
+    const l = e.target.closest('[data-listen]');
+    if (l && C.onListen) { e.preventDefault(); C.onListen(l.dataset.listen); return; }
     const b = e.target.closest('[data-a]');
     if (!b || st.busy) return;
     e.preventDefault();
@@ -276,14 +280,20 @@
         root.insertAdjacentHTML('afterbegin', '<progress max="100" value="0" style="width:100%;max-width:700px;height:18px"></progress><p class="hskn-status"></p><p class="hskn-done"></p>');
         audio();
         break;
-      case 'more': st.form.mode = 'existing'; st.form.topic_id = b.dataset.id; renderStart(); window.scrollTo(0, 0); break;
+      case 'more': st.form.mode = 'existing'; st.form.topic_id = b.dataset.id; renderStart(); root.scrollIntoView({ block: 'start' }); break;
       case 'hide':
         if (!confirm('Ẩn chủ đề này khỏi trình phát? (Không xoá dữ liệu.)')) return;
         await api('DELETE', '/topics/' + b.dataset.id);
+        if (C.onChange) C.onChange();
         await start();
         break;
     }
   });
 
   start();
+  }
+
+  window.HSKNAuthor = { mount };
+  const el = document.getElementById('hskn-author');
+  if (el && window.HSKN_AUTHOR) mount(el, window.HSKN_AUTHOR);
 })();
