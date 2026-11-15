@@ -293,6 +293,14 @@ final class AdminPages
                     <tr><th>Số từ mỗi bài</th><td><?php $num('chunk_size', 10, 100, 5); ?></td></tr>
                     <tr><th>Nghe liên tục</th><td><?php $check('auto_next', 'Hết bài tự chuyển sang bài kế tiếp'); ?></td></tr>
                     <tr><th>Người học</th><td><?php $check('allow_user_override', 'Cho phép người học tự chỉnh các tuỳ chọn trên trong trình phát'); ?></td></tr>
+                    <tr><th>Phân tích câu</th><td>
+                        <select name="<?php echo esc_attr($o); ?>[analyze_access]">
+                            <?php foreach (['all' => 'Mọi người', 'login' => 'Thành viên đã đăng nhập', 'admin' => 'Chỉ admin', 'off' => 'Tắt'] as $v => $l) : ?>
+                                <option value="<?php echo esc_attr($v); ?>" <?php selected($s['analyze_access'], $v); ?>><?php echo esc_html($l); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        tối đa <?php $num('analyze_limit', 1, 500); ?> câu mới / giờ / người
+                        <p class="description">Ô nhập câu (tiếng Trung hoặc tiếng Việt) → tách ý, từ vựng, pinyin, Hán Việt, có loa đọc. Dùng DeepSeek + giọng đọc ở trang Cài đặt API; câu đã phân tích được lưu lại, không tốn lượt. Đặt trên trang riêng bằng shortcode <code>[hskn_phan_tich]</code>; trình phát cũng có nút mở.</p></td></tr>
                     <tr><th>Dọn cache</th><td>xoá bài nghe đã ghép không ai nghe sau <?php $num('cache_days', 1, 365); ?> ngày</td></tr>
                     <tr><th>Gỡ plugin</th><td><?php $check('delete_on_uninstall', 'Xoá toàn bộ bảng, cài đặt và audio khi gỡ plugin'); ?></td></tr>
                 </table>

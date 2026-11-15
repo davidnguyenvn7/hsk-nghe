@@ -29,12 +29,12 @@ final class DeepSeek
         }
     }
 
-    public function json(string $user, float $temperature = 0.8): array
+    public function json(string $user, float $temperature = 0.8, ?string $system = null): array
     {
         $body = wp_json_encode([
             'model'           => $this->model,
             'temperature'     => $temperature,
-            'messages'        => [['role' => 'system', 'content' => self::SYSTEM], ['role' => 'user', 'content' => $user]],
+            'messages'        => [['role' => 'system', 'content' => $system ?? self::SYSTEM], ['role' => 'user', 'content' => $user]],
             'response_format' => ['type' => 'json_object'],
             'thinking'        => ['type' => 'disabled'],
         ]);

@@ -5,11 +5,13 @@ namespace HSKN;
 use HSKN\Admin\AdminPages;
 use HSKN\Install\Schema;
 use HSKN\Rest\AdminController;
+use HSKN\Rest\AnalyzeController;
 use HSKN\Rest\AuthorController;
 use HSKN\Rest\ContentController;
 use HSKN\Rest\TopicsController;
 use HSKN\Rest\TracksController;
 use HSKN\Rest\WordsController;
+use HSKN\Shortcode\Analyze;
 use HSKN\Shortcode\Player;
 use HSKN\Support\Cache;
 use HSKN\Support\Settings;
@@ -37,9 +39,11 @@ final class Plugin
             (new AdminController())->register();
             (new AuthorController())->register();
             (new ContentController())->register();
+            (new AnalyzeController())->register();
         });
 
         (new Player())->register();
+        (new Analyze())->register();
         (new Updater())->register();   // chạy cả trong cron (WP kiểm tra cập nhật nền), không chỉ trong admin
 
         if (is_admin()) {

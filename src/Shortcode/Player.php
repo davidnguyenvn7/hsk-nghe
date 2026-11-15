@@ -48,6 +48,9 @@ final class Player
                 'manage'   => esc_url_raw(admin_url('admin.php?page=hskn-content')),
             ];
         }
+        if ($an = Analyze::config()) {
+            $config['analyze'] = $an;
+        }
         wp_enqueue_style('hskn-player', HSKN_URL . 'assets/player.css', [], $ver('assets/player.css'));
         wp_enqueue_script('hskn-player', HSKN_URL . 'assets/player.js', [], $ver('assets/player.js'), ['in_footer' => true, 'strategy' => 'defer']);
 

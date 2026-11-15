@@ -29,6 +29,8 @@ final class Settings
             'auto_next'           => true,
             'allow_user_override' => true,
             'cache_days'          => 30,
+            'analyze_access'      => 'all',   // phân tích câu: all | login | admin | off
+            'analyze_limit'       => 30,      // số câu MỚI mỗi giờ cho một người (admin không giới hạn)
             'delete_on_uninstall' => false,
         ];
     }
@@ -57,6 +59,8 @@ final class Settings
         if (isset($in['gap_ms'])) $out['gap_ms'] = $int($in['gap_ms'], 300, 5000, 100);
         if (isset($in['end_gap_ms'])) $out['end_gap_ms'] = $int($in['end_gap_ms'], 300, 8000, 100);
         if (isset($in['chunk_size'])) $out['chunk_size'] = $int($in['chunk_size'], 10, 100, 5);
+        if (isset($in['analyze_access']) && in_array($in['analyze_access'], ['all', 'login', 'admin', 'off'], true)) $out['analyze_access'] = $in['analyze_access'];
+        if (isset($in['analyze_limit'])) $out['analyze_limit'] = $int($in['analyze_limit'], 1, 500);
         if (isset($in['cache_days'])) $out['cache_days'] = $int($in['cache_days'], 1, 365);
         foreach (['sentence_meaning', 'slow_repeat', 'auto_next', 'allow_user_override', 'delete_on_uninstall'] as $k) {
             if (array_key_exists($k, $in)) $out[$k] = $bool($in[$k]);

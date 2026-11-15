@@ -27,7 +27,12 @@ Phát hành bản mới: tăng `Version:` và `HSKN_VERSION` trong `hsk-nghe.php
 [hskn_player]                    thư viện bài nghe + trình phát (đọc ?track= trên URL)
 [hskn_player track="topic-03"]   mở sẵn một bài
 [hskn_player group="03"]         chỉ hiện bài của chủ đề 03 (group="hsk2" | "hsk3")
+[hskn_phan_tich]                 ô phân tích câu (tiếng Trung / tiếng Việt): các ý, từ vựng, pinyin, Hán Việt, loa đọc
 ```
+
+Phân tích câu dùng DeepSeek (kết quả được cache 60 ngày) và giọng đọc trong Cài đặt API (clip lưu chung `uploads/hskn/clips/`;
+chưa cấu hình giọng đọc thì trình duyệt tự đọc). Ai được dùng + giới hạn số câu mới mỗi giờ: HSK Nghe → Cài đặt nghe.
+Trình phát cũng có nút kính lúp mở khung này.
 
 ## WP-CLI
 

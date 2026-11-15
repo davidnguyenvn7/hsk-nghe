@@ -18,6 +18,7 @@
     list: 'M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z',
     loop: 'M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z',
     add: 'M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z',
+    lens: 'M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
     close: 'M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6z',
   };
   const SPEEDS = [0.75, 0.9, 1, 1.15, 1.3];
@@ -241,6 +242,7 @@
       <section class="hk-player" aria-label="Trình phát">
         <div class="hk-head">
           <div class="hk-head-text"><div class="hk-title">Chọn bài nghe</div><div class="hk-sub"></div></div>
+          ${cfg.analyze ? `<button class="hk-icon" data-act="analyze" title="Phân tích câu" aria-label="Phân tích câu">${svg('lens')}</button>` : ''}
           ${cfg.author ? `<button class="hk-icon" data-act="author" title="Tạo chủ đề" aria-label="Tạo chủ đề">${svg('add')}</button>` : ''}
           <button class="hk-icon" data-act="settings" title="Cài đặt nghe" aria-label="Cài đặt nghe">${svg('tune')}</button>
           <button class="hk-icon" data-act="library" title="Danh sách bài" aria-label="Danh sách bài">${svg('list')}</button>
@@ -281,7 +283,12 @@
         <button class="hk-mini-btn" data-act="next" aria-label="Mục sau">${svg('next')}</button>
       </div>
       <dialog class="hk-sheet"></dialog>
-      ${cfg.author ? `<dialog class="hk-dlg" aria-label="Tạo chủ đề">
+      ${cfg.analyze ? `<dialog class="hk-dlg hk-dlg-an" aria-label="Phân tích câu">
+        <div class="hk-dlg-head"><strong>Phân tích câu</strong>
+          <button class="hk-icon" data-dlg="close" aria-label="Đóng">${svg('close')}</button></div>
+        <div class="hk-dlg-body"><div class="hk-empty">Đang tải…</div></div>
+      </dialog>` : ''}
+      ${cfg.author ? `<dialog class="hk-dlg hk-dlg-author" aria-label="Tạo chủ đề">
         <div class="hk-dlg-head"><strong>Tạo chủ đề</strong>
           <a class="hk-dlg-link" href="${esc(cfg.author.manage)}">Quản lý nội dung</a>
           <button class="hk-icon" data-dlg="close" aria-label="Đóng" autofocus>${svg('close')}</button></div>
@@ -295,7 +302,8 @@
       range: $('.hk-seek input'), count: $('.hk-count'), play: $('.hk-play'), speed: $('.hk-speed'),
       msg: $('.hk-msg'), lib: $('.hk-lib'), sheet: $('.hk-sheet'), player: $('.hk-player'),
       mini: $('.hk-mini'), miniZh: $('.hk-mini-text b'), miniSub: $('.hk-mini-text span'), miniPlay: $('.hk-mini [data-act="toggle"]'),
-      dlg: $('.hk-dlg'), dlgBody: $('.hk-dlg-body'),
+      dlg: $('.hk-dlg-author'), dlgBody: $('.hk-dlg-author .hk-dlg-body'),
+      anDlg: $('.hk-dlg-an'), anBody: $('.hk-dlg-an .hk-dlg-body'),
     };
     const setPlayIcon = (playing) => {
       [ui.play, ui.miniPlay].forEach((b) => { b.innerHTML = svg(playing ? 'pause' : 'play'); b.setAttribute('aria-label', playing ? 'Tạm dừng' : 'Phát'); });
@@ -766,6 +774,7 @@
       const t = e.target.closest('button');
       if (!t || ui.sheet.contains(t)) return;
       if (ui.dlg && ui.dlg.contains(t)) { if (t.dataset.dlg === 'close') ui.dlg.close(); return; }
+      if (ui.anDlg && ui.anDlg.contains(t)) { if (t.dataset.dlg === 'close') ui.anDlg.close(); return; }
       if (t.dataset.track) {
         unlock();
         // bấm lại bài đang phát = tạm dừng / phát tiếp
@@ -808,6 +817,7 @@
         case 'library': ui.lib.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
         case 'to-player': ui.player.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
         case 'author': openAuthor(); break;
+        case 'analyze': openAnalyze(); break;
       }
     });
     ui.range.addEventListener('input', () => {
@@ -817,7 +827,7 @@
     ui.range.addEventListener('change', () => seekTo((ui.range.value / 1000) * (audio.duration || 0)));
     // màn hình học trên máy tính: phím tắt
     document.addEventListener('keydown', (e) => {
-      if (e.target.closest('input, textarea, select, [contenteditable]') || ui.sheet.open || (ui.dlg && ui.dlg.open) || !st.pl) return;
+      if (e.target.closest('input, textarea, select, [contenteditable]') || ui.sheet.open || (ui.dlg && ui.dlg.open) || (ui.anDlg && ui.anDlg.open) || !st.pl) return;
       if (e.code === 'Space') { e.preventDefault(); st.unlocked = true; audio.paused ? audio.play() : audio.pause(); }
       else if (e.key === 'ArrowLeft') unitStep(-1);
       else if (e.key === 'ArrowRight') unitStep(1);
@@ -867,6 +877,30 @@
       });
     }
     if (ui.dlg) ui.dlg.addEventListener('close', () => { if (authorDirty) refresh(); });
+
+    // ------------------------------------------------------------ phân tích câu (assets/analyze.js, tải khi bấm)
+    let analyzer = null;
+    function openAnalyze() {
+      const a = cfg.analyze;
+      if (!a || !ui.anDlg) return;
+      if (typeof ui.anDlg.showModal === 'function') ui.anDlg.showModal(); else ui.anDlg.setAttribute('open', '');
+      if (analyzer) { analyzer.then((api) => api && api.focus()); return; }
+      analyzer = new Promise((ok, fail) => {
+        if (window.HSKNAnalyze) return ok();
+        const s = document.createElement('script');
+        s.src = a.script;
+        s.onload = ok;
+        s.onerror = () => fail(new Error('Không tải được phần phân tích câu.'));
+        document.head.appendChild(s);
+      }).then(() => window.HSKNAnalyze.mount(ui.anBody, Object.assign({}, a, {
+        // loa trong khung phân tích → tạm dừng bài đang nghe
+        onSpeak: () => { if (!audio.paused) audio.pause(); },
+      }))).catch((e) => {
+        analyzer = null;
+        ui.anBody.innerHTML = `<div class="hk-empty">${esc(e.message)}</div>`;
+      });
+    }
+    if (ui.anDlg) ui.anDlg.addEventListener('close', () => { if (window.HSKNAnalyze) window.HSKNAnalyze.stop(); });
 
     // tải (lại) danh sách bài — lúc mở trang và sau khi admin tạo / ẩn chủ đề
     function refresh() {
