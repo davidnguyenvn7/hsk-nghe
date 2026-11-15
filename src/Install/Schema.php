@@ -14,7 +14,7 @@ defined('ABSPATH') || exit;
  */
 final class Schema
 {
-    public const DB_VERSION = '2';
+    public const DB_VERSION = '3';
 
     public static function activate(): void
     {
@@ -44,6 +44,8 @@ final class Schema
             'progress'      => $p . 'progress',
             'listen_log'    => $p . 'listen_log',
             'plan'          => $p . 'plan',
+            'lists'         => $p . 'lists',
+            'saved'         => $p . 'saved',
         ];
     }
 
@@ -185,6 +187,32 @@ final class Schema
   start_date DATE NOT NULL,
   settings LONGTEXT NULL,
   PRIMARY KEY  (user_id)
+) $c;");
+
+        // ---- sổ tay: câu / từ người học lưu từ "Tra câu", chia theo bài nghe tự đặt tên
+        dbDelta("CREATE TABLE {$t['lists']} (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  name VARCHAR(191) NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  PRIMARY KEY  (id),
+  KEY user_id (user_id)
+) $c;");
+
+        dbDelta("CREATE TABLE {$t['saved']} (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  list_id BIGINT UNSIGNED NOT NULL,
+  kind VARCHAR(8) NOT NULL,
+  zh VARCHAR(191) NOT NULL,
+  pinyin VARCHAR(512) NOT NULL DEFAULT '',
+  vi VARCHAR(512) NOT NULL DEFAULT '',
+  data LONGTEXT NULL,
+  created_at DATETIME NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY list_item (list_id,kind,zh),
+  KEY user_id (user_id)
 ) $c;");
 
         update_option('hskn_db_version', self::DB_VERSION, false);

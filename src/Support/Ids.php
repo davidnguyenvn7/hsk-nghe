@@ -9,7 +9,7 @@ final class Ids
     public const WORD = '/^(H[1-3]-\d{3}|T\d{2}-\d{3})$/';
     public const SENTENCE = '/^\d{2}-(S\d{2,3}|D\d+-\d+|E\d{3,4})$/';
     public const TOPIC = '/^\d{2}$/';
-    public const TRACK = '/^(topic-\d{2}|words-\d{2}-\d{2}|vocab-hsk[23]-\d{2})$/';
+    public const TRACK = '/^(topic-\d{2}|words-\d{2}-\d{2}|vocab-hsk[23]-\d{2}|my-\d{1,10})$/';   // my-N: bài trong sổ tay
 
     public static function isWord(string $id): bool
     {

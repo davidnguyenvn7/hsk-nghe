@@ -26,7 +26,6 @@ final class Analyze
         return [
             'rest'   => esc_url_raw(rest_url('hskn/v1/analyze')),
             'nonce'  => wp_create_nonce('wp_rest'),
-            'script' => esc_url_raw(add_query_arg('ver', self::ver('assets/analyze.js'), HSKN_URL . 'assets/analyze.js')),
         ];
     }
 
@@ -42,10 +41,15 @@ final class Analyze
             return is_user_logged_in() ? '' : '<p>Hãy đăng nhập để dùng phần phân tích câu.</p>';
         }
         wp_enqueue_style('hskn-player', HSKN_URL . 'assets/player.css', [], self::ver('assets/player.css'));
-        wp_enqueue_script('hskn-analyze', HSKN_URL . 'assets/analyze.js', [], self::ver('assets/analyze.js'), ['in_footer' => true, 'strategy' => 'defer']);
+        $args = ['in_footer' => true, 'strategy' => 'defer'];
+        wp_enqueue_script('hskn-me', HSKN_URL . 'assets/me.js', [], self::ver('assets/me.js'), $args);
+        wp_enqueue_script('hskn-analyze', HSKN_URL . 'assets/analyze.js', ['hskn-me'], self::ver('assets/analyze.js'), $args);
+        // đăng nhập rồi thì lưu được vào sổ tay ngay từ trang này
+        $me = is_user_logged_in() ? ['rest' => esc_url_raw(rest_url('hskn/v1/')), 'nonce' => $config['nonce'], 'ajax' => esc_url_raw(admin_url('admin-ajax.php'))] : null;
         return sprintf(
-            '<div class="hskn hskn-an-page" data-analyze="%s"><div class="hskn-loading">Đang tải…</div><noscript>Cần JavaScript.</noscript></div>',
-            esc_attr(wp_json_encode($config))
+            '<div class="hskn hskn-an-page" data-analyze="%s" data-me="%s"><div class="hskn-loading">Đang tải…</div><noscript>Cần JavaScript.</noscript></div>',
+            esc_attr(wp_json_encode($config)),
+            esc_attr(wp_json_encode($me))
         );
     }
 }

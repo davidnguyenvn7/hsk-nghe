@@ -301,6 +301,12 @@ final class AdminPages
                         </select>
                         tối đa <?php $num('analyze_limit', 1, 500); ?> câu mới / giờ / người
                         <p class="description">Ô nhập câu (tiếng Trung hoặc tiếng Việt) → tách ý, từ vựng, pinyin, Hán Việt, có loa đọc. Dùng DeepSeek + giọng đọc ở trang Cài đặt API; câu đã phân tích được lưu lại, không tốn lượt. Đặt trên trang riêng bằng shortcode <code>[hskn_phan_tich]</code>; trình phát cũng có nút mở.</p></td></tr>
+                    <tr><th>App &amp; tài khoản</th><td>
+                        App cài lên điện thoại: <a href="<?php echo esc_url(\HSKN\Pwa\Pwa::url('app')); ?>" target="_blank"><code><?php echo esc_html(\HSKN\Pwa\Pwa::url('app')); ?></code></a>
+                        <p class="description">Trên trình phát có nút “Cài app” (Android / máy tính: cài thẳng; iPhone: hướng dẫn “Thêm vào MH chính”). Cần site chạy HTTPS.</p>
+                        <p class="description">Người học đăng nhập ngay trên trình phát, được nhớ 1 năm, rồi lưu câu / từ vào Sổ tay và tự tạo bài nghe.
+                        Đăng ký tài khoản mới: <strong><?php echo get_option('users_can_register') ? 'đang mở' : 'đang tắt'; ?></strong>
+                        (<a href="<?php echo esc_url(admin_url('options-general.php')); ?>">Cài đặt → Tổng quan → Thành viên</a>).</p></td></tr>
                     <tr><th>Dọn cache</th><td>xoá bài nghe đã ghép không ai nghe sau <?php $num('cache_days', 1, 365); ?> ngày</td></tr>
                     <tr><th>Gỡ plugin</th><td><?php $check('delete_on_uninstall', 'Xoá toàn bộ bảng, cài đặt và audio khi gỡ plugin'); ?></td></tr>
                 </table>

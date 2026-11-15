@@ -96,11 +96,52 @@ final class PlaylistService
         return ['units' => $this->units, 'steps' => $this->steps, 'speech' => $this->speech, 'missing' => $this->missing];
     }
 
+    /**
+     * Bài nghe từ sổ tay: từ và câu xen kẽ theo thứ tự đã lưu, mỗi mục kèm sẵn clip (NotebookService::trackContent).
+     * Từ đọc như bài từ vựng (từ × n → nghĩa → câu ví dụ), câu đọc như bài mẫu câu.
+     */
+    public function buildMixed(array $items, array $settings): array
+    {
+        $this->s = $settings;
+        $this->units = [];
+        $this->steps = [];
+        $this->speech = [];
+        $this->missing = 0;
+        foreach ($items as $it) {
+            $c = $it['clips'];
+            if ($it['kind'] === 'sentence') {
+                $this->missing += empty($c['zh']) ? 1 : 0;
+                $this->sentence(['id' => $it['id'], 'type' => 'M', 'zh' => $it['zh'], 'pinyin' => $it['pinyin'], 'vi' => $it['vi'],
+                                 'hv' => $it['han_viet'], 'speaker' => null], $c, null, max(1, (int) $settings['sentence_repeat']));
+                $this->endItem();
+                continue;
+            }
+            $this->missing += empty($c['word']) ? 1 : 0;
+            $u = $this->unit(['kind' => 'word', 'id' => $it['id'], 'zh' => $it['zh'], 'pinyin' => $it['pinyin'], 'vi' => $it['vi'],
+                              'en' => '', 'level' => 0, 'is_term' => false, 'hv' => $it['han_viet']]);
+            for ($i = 0; $i < (int) $settings['word_repeat']; $i++) {
+                $this->say($c['word'] ?? null, $it['zh'], 'zh', self::WORD_RATE, 'f', $u, 'word');
+            }
+            if ($settings['meaning_lang'] !== 'none') {
+                $this->say($c['vi'] ?? null, $it['vi'], 'vi', 1, 'f', $u, 'vi');
+            }
+            $ex = $it['example'];
+            if ((int) $settings['sentence_repeat'] > 0 && !empty($ex['zh'])) {
+                $map = ['zh' => $c['example'] ?? null, 'zh_slow' => $c['example_slow'] ?? null, 'vi' => $c['example_vi'] ?? null];
+                $this->sentence(['id' => $it['id'] . '-ex', 'type' => 'X', 'speaker' => 'B', 'zh' => $ex['zh'],
+                                 'pinyin' => $ex['pinyin'] ?? '', 'vi' => $ex['vi'] ?? ''], array_filter($map), $u, (int) $settings['sentence_repeat']);
+            }
+            $this->endItem();
+        }
+        return ['units' => $this->units, 'steps' => $this->steps, 'speech' => $this->speech, 'missing' => $this->missing];
+    }
+
     private function sentence(array $sent, array $c, ?int $parent, int $repeat): void
     {
         $u = $this->unit(['kind' => 'sentence', 'id' => $sent['id'], 'type' => $sent['type'], 'zh' => $sent['zh'],
                           'pinyin' => $sent['pinyin'] ?? '', 'vi' => $sent['vi'] ?? '', 'en' => $sent['en'] ?? '',
-                          'grammar' => $sent['grammar'] ?? '', 'speaker' => $sent['type'] === 'X' ? null : ($sent['speaker'] ?? null), 'parent' => $parent]);
+                          'grammar' => $sent['grammar'] ?? '', 'speaker' => $sent['type'] === 'X' ? null : ($sent['speaker'] ?? null), 'parent' => $parent,
+                          'hv' => $sent['hv'] ?? '']);
         $voice = ($sent['speaker'] ?? null) === 'B' ? 'm' : 'f';
         // không có clip câu chính thì bỏ cả câu khỏi bản audio (bản giọng máy vẫn đọc đủ)
         $hasAudio = !empty($c['zh']);

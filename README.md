@@ -32,7 +32,19 @@ Phát hành bản mới: tăng `Version:` và `HSKN_VERSION` trong `hsk-nghe.php
 
 Phân tích câu dùng DeepSeek (kết quả được cache 60 ngày) và giọng đọc trong Cài đặt API (clip lưu chung `uploads/hskn/clips/`;
 chưa cấu hình giọng đọc thì trình duyệt tự đọc). Ai được dùng + giới hạn số câu mới mỗi giờ: HSK Nghe → Cài đặt nghe.
-Trình phát cũng có nút kính lúp mở khung này.
+Trình phát có sẵn tab "Tra câu".
+
+### Trình phát (từ 0.5.0)
+
+- Thanh trên: logo, **Cài app**, **+ Tạo** (câu / từ mới · tạo bài nghe mới · admin: tạo chủ đề bằng AI), tài khoản.
+- 3 tab: **Nghe** (trình phát + thư viện, có mục "Của tôi"), **Tra câu**, **Sổ tay**.
+- **Sổ tay** (cần đăng nhập): lưu câu / từ từ Tra câu, chia theo bài tự đặt tên; mỗi bài là một bài nghe (`my-{id}`)
+  ghép MP3 như bài thường (clip tạo khi lưu, cùng kho `uploads/hskn/clips/`). "Tạo bài nghe mới": dán tối đa 20 dòng,
+  AI phân tích từng dòng rồi lưu vào bài. Có chế độ ẩn nghĩa để tự kiểm tra.
+- **Đăng nhập / đăng ký** ngay trên trang (REST `hskn/v1/auth/*`), "Ghi nhớ" = cookie 1 năm.
+  Đăng ký chỉ hiện khi WordPress bật "Ai cũng có thể đăng ký".
+- **App (PWA)**: `/?hskn=app` là trang app toàn màn hình (start_url của manifest `/?hskn=manifest`,
+  service worker `/?hskn=sw`). Cần HTTPS. SW chỉ lưu trang app, JS/CSS của plugin và danh sách bài / playlist công khai.
 
 ## WP-CLI
 

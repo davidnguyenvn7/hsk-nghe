@@ -4,6 +4,9 @@
  * Mỗi bài là MỘT file MP3 do server ghép sẵn theo cài đặt (phát nền ổn định khi khoá màn hình),
  * kèm cues [ms, unit, loại] để biết đang đọc từ/câu nào. Không dùng setTimeout cho khoảng lặng:
  * khoảng lặng nằm sẵn trong file.
+ *
+ * Khung app: thanh trên (logo, Cài app, + Tạo, tài khoản) + 3 tab Nghe / Tra câu / Sổ tay.
+ * Dùng ở shortcode [hskn_player] và trang app toàn màn hình /?hskn=app (cfg.app). Cần me.js, analyze.js, notebook.js.
  */
 (function () {
   'use strict';
@@ -19,6 +22,12 @@
     loop: 'M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z',
     add: 'M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z',
     lens: 'M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
+    user: 'M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-3.3 0-9 1.65-9 4.95V21h18v-2.05C21 15.65 15.3 14 12 14z',
+    install: 'M5 20h14v-2H5v2zm7-3 6-6-1.41-1.41L13 13.17V3h-2v10.17L7.41 9.59 6 11l6 6z',
+    headset: 'M12 3a9 9 0 0 0-9 9v7a2 2 0 0 0 2 2h3v-8H5v-1a7 7 0 0 1 14 0v1h-3v8h3a2 2 0 0 0 2-2v-7a9 9 0 0 0-9-9z',
+    book: 'M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM9 4h2v5l-1-.75L9 9V4zm9 16H6V4h1v9l3-2.25L13 13V4h5v16z',
+    spark: 'M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z',
+    logout: 'M10.09 15.59 11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 0 0-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z',
     close: 'M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6z',
   };
   const SPEEDS = [0.75, 0.9, 1, 1.15, 1.3];
@@ -222,7 +231,11 @@
       tab: saved.tab || 'topics',
       forceSpeech: {},     // bài có file MP3 lỗi → đọc bằng giọng máy
       speechWarm: false,
+      view: cfg.view || saved.view || 'listen',
     };
+    const Me = window.HSKNMe;
+    if (cfg.user) Me.init({ rest: cfg.rest, nonce: cfg.nonce, ajax: cfg.ajax });
+    if (st.view === 'lookup' && !cfg.analyze) st.view = 'listen';
     // `audio` là phần tử <audio> thật (bài có đủ clip) hoặc SpeechAudio (đọc bằng giọng của máy)
     const realAudio = new Audio();
     realAudio.preload = 'auto';
@@ -234,16 +247,30 @@
     const settings = () => Object.assign({}, cfg.defaults, st.over);
     const persist = () => storage.write({
       track: st.track && st.track.id, over: st.over, speed: st.speed, py: st.py, mean: st.mean,
-      auto: st.auto, pos: st.pos, tab: st.tab,
+      auto: st.auto, pos: st.pos, tab: st.tab, view: st.view,
     });
 
     // ------------------------------------------------------------ skeleton
+    const user = cfg.user;
+    const tabs = [['listen', 'Nghe', 'headset']];
+    if (cfg.analyze) tabs.push(['lookup', 'Tra câu', 'lens']);
+    tabs.push(['notebook', 'Sổ tay', 'book']);
+    root.classList.toggle('is-app', !!cfg.app);
     root.innerHTML = `
+      <header class="hk-top">
+        <div class="hk-brand"><span class="hk-logo" aria-hidden="true">听</span><span><b>HSK Nghe</b><small>nghe · tra · nhớ</small></span></div>
+        <button class="hk-topbtn hk-install" data-act="install" hidden>${svg('install')}<span>Cài app</span></button>
+        <button class="hk-topbtn hk-create" data-act="create" aria-label="Tạo mới">${svg('add')}<span>Tạo</span></button>
+        <button class="hk-avatar${user ? ' has-img' : ''}" data-act="account" aria-label="${user ? 'Tài khoản: ' + esc(user.name) : 'Đăng nhập'}">
+          ${user ? `<img src="${esc(user.avatar)}" alt="" width="34" height="34" loading="lazy">` : `${svg('user')}<span>Đăng nhập</span>`}</button>
+      </header>
+      <nav class="hk-nav" role="tablist" aria-label="Chức năng">
+        ${tabs.map(([k, l, ic]) => `<button class="hk-navbtn" role="tab" data-view="${k}" aria-selected="false">${svg(ic)}<span>${l}</span></button>`).join('')}
+      </nav>
+      <div class="hk-view" data-pane="listen">
       <section class="hk-player" aria-label="Trình phát">
         <div class="hk-head">
           <div class="hk-head-text"><div class="hk-title">Chọn bài nghe</div><div class="hk-sub"></div></div>
-          ${cfg.analyze ? `<button class="hk-icon" data-act="analyze" title="Phân tích câu" aria-label="Phân tích câu">${svg('lens')}</button>` : ''}
-          ${cfg.author ? `<button class="hk-icon" data-act="author" title="Tạo chủ đề" aria-label="Tạo chủ đề">${svg('add')}</button>` : ''}
           <button class="hk-icon" data-act="settings" title="Cài đặt nghe" aria-label="Cài đặt nghe">${svg('tune')}</button>
           <button class="hk-icon" data-act="library" title="Danh sách bài" aria-label="Danh sách bài">${svg('list')}</button>
         </div>
@@ -276,20 +303,24 @@
         </div>
         <div class="hk-msg" role="status"></div>
       </section>
+      <div class="hk-quick">
+        ${cfg.analyze ? `<button class="hk-quickbtn" data-act="new-phrase">${svg('lens')}<span><b>Câu / từ mới</b><small>Tra, phân tích, lưu lại</small></span></button>` : ''}
+        <button class="hk-quickbtn" data-act="new-track">${svg('add')}<span><b>Tạo bài nghe mới</b><small>Từ câu, từ của bạn</small></span></button>
+      </div>
       <section class="hk-lib" aria-label="Danh sách bài nghe"></section>
+      </div>
+      <div class="hk-view" data-pane="lookup" hidden><div class="hk-lookup"></div></div>
+      <div class="hk-view" data-pane="notebook" hidden><div class="hk-notebook"></div></div>
       <div class="hk-mini" hidden>
         <button class="hk-mini-text" data-act="to-player" aria-label="Mở trình phát"><b></b><span></span></button>
         <button class="hk-mini-btn" data-act="toggle" aria-label="Phát">${svg('play')}</button>
         <button class="hk-mini-btn" data-act="next" aria-label="Mục sau">${svg('next')}</button>
       </div>
       <dialog class="hk-sheet"></dialog>
-      ${cfg.analyze ? `<dialog class="hk-dlg hk-dlg-an" aria-label="Phân tích câu">
-        <div class="hk-dlg-head"><strong>Phân tích câu</strong>
-          <button class="hk-icon" data-dlg="close" aria-label="Đóng">${svg('close')}</button></div>
-        <div class="hk-dlg-body"><div class="hk-empty">Đang tải…</div></div>
-      </dialog>` : ''}
+      <dialog class="hk-sheet hk-menu"></dialog>
+      <dialog class="hk-dlg hk-dlg-sm hk-dlg-auth" aria-label="Đăng nhập"></dialog>
       ${cfg.author ? `<dialog class="hk-dlg hk-dlg-author" aria-label="Tạo chủ đề">
-        <div class="hk-dlg-head"><strong>Tạo chủ đề</strong>
+        <div class="hk-dlg-head"><strong>Tạo chủ đề bằng AI</strong>
           <a class="hk-dlg-link" href="${esc(cfg.author.manage)}">Quản lý nội dung</a>
           <button class="hk-icon" data-dlg="close" aria-label="Đóng" autofocus>${svg('close')}</button></div>
         <div class="hk-dlg-body hk-author"><div class="hk-empty">Đang tải…</div></div>
@@ -300,10 +331,11 @@
       title: $('.hk-title'), sub: $('.hk-sub'), stage: $('.hk-stage'), parent: $('.hk-parent'), zh: $('.hk-zh'),
       py: $('.hk-py'), mean: $('.hk-mean'), tags: $('.hk-tags'), cur: $('.hk-cur'), dur: $('.hk-dur'),
       range: $('.hk-seek input'), count: $('.hk-count'), play: $('.hk-play'), speed: $('.hk-speed'),
-      msg: $('.hk-msg'), lib: $('.hk-lib'), sheet: $('.hk-sheet'), player: $('.hk-player'),
+      msg: $('.hk-msg'), lib: $('.hk-lib'), sheet: $('.hk-sheet:not(.hk-menu)'), player: $('.hk-player'),
       mini: $('.hk-mini'), miniZh: $('.hk-mini-text b'), miniSub: $('.hk-mini-text span'), miniPlay: $('.hk-mini [data-act="toggle"]'),
       dlg: $('.hk-dlg-author'), dlgBody: $('.hk-dlg-author .hk-dlg-body'),
-      anDlg: $('.hk-dlg-an'), anBody: $('.hk-dlg-an .hk-dlg-body'),
+      menu: $('.hk-menu'), auth: $('.hk-dlg-auth'), install: $('.hk-install'),
+      lookup: $('.hk-lookup'), notebook: $('.hk-notebook'),
     };
     const setPlayIcon = (playing) => {
       [ui.play, ui.miniPlay].forEach((b) => { b.innerHTML = svg(playing ? 'pause' : 'play'); b.setAttribute('aria-label', playing ? 'Tạm dừng' : 'Phát'); });
@@ -314,6 +346,7 @@
     // Bài nghe là API công khai: không gửi nonce (nonce cũ + cookie đăng nhập mới ở tab khác → WP trả 403).
     // Nonce chỉ dùng cho các endpoint me/* về sau.
     async function api(path) {
+      if (path.startsWith('me/')) return Me.api('GET', path);
       const res = await fetch(cfg.rest + path, { credentials: 'omit' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || `Lỗi ${res.status}`);
@@ -324,7 +357,8 @@
       const s = settings();
       const q = new URLSearchParams();
       if (cfg.allowOverride) LISTEN_KEYS.forEach((k) => q.set(k, String(s[k])));
-      return `tracks/${id}/playlist?${q}`;
+      // bài trong sổ tay: my-N → me/lists/N/playlist (cần đăng nhập)
+      return id.startsWith('my-') ? `me/lists/${id.slice(3)}/playlist?${q}` : `tracks/${id}/playlist?${q}`;
     }
 
     function getPlaylist(id) {
@@ -587,7 +621,8 @@
       ui.zh.classList.toggle('is-on', kind === 'word' || kind === 'zh' || kind === 'zh_slow');
       ui.mean.classList.toggle('is-on', kind === 'vi' || kind === 'en');
       const tags = [];
-      if (unit.kind === 'word') tags.push(unit.is_term ? `<span class="hk-tag lv4">chuyên ngành</span>` : `<span class="hk-tag lv${unit.level}">HSK ${unit.level}</span>`);
+      if (unit.kind === 'word' && unit.level) tags.push(unit.is_term ? `<span class="hk-tag lv4">chuyên ngành</span>` : `<span class="hk-tag lv${unit.level}">HSK ${unit.level}</span>`);
+      if (unit.hv) tags.push(`<span class="hk-tag hv">${esc(unit.hv)}</span>`);
       if (unit.speaker) tags.push(`<span class="hk-tag">Người ${esc(unit.speaker)}</span>`);
       if (unit.grammar) tags.push(`<span class="hk-tag">${esc(unit.grammar)}</span>`);
       if (kind === 'zh_slow') tags.push('<span class="hk-tag slow">chậm</span>');
@@ -595,13 +630,14 @@
     }
 
     function renderCount(u) {
+      // mục chính = unit không có parent (từ, hoặc câu đứng riêng); bài sổ tay có cả hai
       const units = st.pl.units;
-      const isWords = units.some((x) => x.kind === 'word');
-      const head = isWords ? 'word' : 'sentence';
-      const list = units.map((x, i) => (x.kind === head ? i : -1)).filter((i) => i >= 0);
-      const top = isWords && units[u].kind !== 'word' ? units[u].parent : u;
+      const list = units.map((x, i) => (x.parent == null ? i : -1)).filter((i) => i >= 0);
+      const kinds = new Set(list.map((i) => units[i].kind));
+      const label = kinds.size > 1 ? 'Mục' : kinds.has('word') ? 'Từ' : 'Câu';
+      const top = units[u].parent != null ? units[u].parent : u;
       const n = list.indexOf(top) + 1;
-      ui.count.textContent = n ? `${isWords ? 'Từ' : 'Câu'} ${n}/${list.length}` : '';
+      ui.count.textContent = n ? `${label} ${n}/${list.length}` : '';
     }
 
     function updateBar() {
@@ -617,8 +653,8 @@
     }
 
     function renderLibrary() {
-      const tracks = st.tracks.filter((t) => !cfg.group || t.group === cfg.group);
-      const add = cfg.author ? `<button class="hk-new" data-act="author">${svg('add')} Tạo chủ đề mới</button>` : '';
+      const tracks = st.tracks.filter((t) => !cfg.group || t.group === cfg.group || t.group === 'mine');
+      const add = cfg.author ? `<button class="hk-new" data-act="author">${svg('spark')} Tạo chủ đề bằng AI</button>` : '';
       if (!tracks.length) {
         ui.lib.innerHTML = '<div class="hk-empty">Chưa có bài nghe nào. Hãy import gói nội dung trong trang quản trị.</div>' + add;
         return;
@@ -637,6 +673,7 @@
       if (topicIds.length) tabs.push(['topics', 'Chủ đề']);
       if (groups.hsk2) tabs.push(['hsk2', 'HSK 2']);
       if (groups.hsk3) tabs.push(['hsk3', 'HSK 3']);
+      tabs.push(['mine', 'Của tôi']);
       if (!tabs.some(([k]) => k === st.tab)) st.tab = tabs[0][0];
 
       let body = '';
@@ -653,6 +690,12 @@
               ${info.description ? `<div class="hk-topic-desc">${esc(info.description)}</div>` : ''}
               <div class="hk-tracks">${items}</div></div>`;
         }).join('');
+      } else if (st.tab === 'mine') {
+        const mine = groups.mine || [];
+        body = !user ? `<div class="hk-mine-empty"><p>Đăng nhập để tạo bài nghe từ những câu, từ bạn lưu.</p>
+              <button class="hk-btn primary" data-act="account">Đăng nhập</button></div>`
+          : `<div class="hk-grid">${mine.map((t) => btn(t, esc(t.title), t.items ? t.subtitle.replace(/^Sổ tay · /, '') : 'trống')).join('')}
+              <button class="hk-track hk-track-add" data-act="new-track">${svg('add')} Bài mới</button></div>`;
       } else {
         body = `<div class="hk-grid">${groups[st.tab].map((t) => btn(t, esc(t.title.replace(/^HSK \d · /, '')), t.subtitle)).join('')}</div>`;
       }
@@ -772,9 +815,10 @@
     // ------------------------------------------------------------ events
     root.addEventListener('click', (e) => {
       const t = e.target.closest('button');
-      if (!t || ui.sheet.contains(t)) return;
+      if (!t || ui.sheet.contains(t) || ui.auth.contains(t) || t.closest('.hk-lookup, .hk-notebook, .hk-dlg-create')) return;
       if (ui.dlg && ui.dlg.contains(t)) { if (t.dataset.dlg === 'close') ui.dlg.close(); return; }
-      if (ui.anDlg && ui.anDlg.contains(t)) { if (t.dataset.dlg === 'close') ui.anDlg.close(); return; }
+      if (ui.menu.contains(t)) ui.menu.close();
+      if (t.dataset.view) { showView(t.dataset.view); return; }
       if (t.dataset.track) {
         unlock();
         // bấm lại bài đang phát = tạm dừng / phát tiếp
@@ -815,9 +859,13 @@
         case 'track-next': if (st.track && st.track.next) { unlock(); load(st.track.next, { autoplay: !audio.paused }); } break;
         case 'settings': openSettings(); break;
         case 'library': ui.lib.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
-        case 'to-player': ui.player.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
+        case 'to-player': showView('listen'); ui.player.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
         case 'author': openAuthor(); break;
-        case 'analyze': openAnalyze(); break;
+        case 'create': openCreateMenu(); break;
+        case 'new-phrase': showView('lookup'); if (lookup) lookup.focus(); break;
+        case 'new-track': showView('notebook'); notebook.create(); break;
+        case 'account': user ? openAccount() : openAuth(); break;
+        case 'install': install(); break;
       }
     });
     ui.range.addEventListener('input', () => {
@@ -827,7 +875,7 @@
     ui.range.addEventListener('change', () => seekTo((ui.range.value / 1000) * (audio.duration || 0)));
     // màn hình học trên máy tính: phím tắt
     document.addEventListener('keydown', (e) => {
-      if (e.target.closest('input, textarea, select, [contenteditable]') || ui.sheet.open || (ui.dlg && ui.dlg.open) || (ui.anDlg && ui.anDlg.open) || !st.pl) return;
+      if (e.target.closest('input, textarea, select, [contenteditable]') || root.querySelector('dialog[open]') || st.view !== 'listen' || !st.pl) return;
       if (e.code === 'Space') { e.preventDefault(); st.unlocked = true; audio.paused ? audio.play() : audio.pause(); }
       else if (e.key === 'ArrowLeft') unitStep(-1);
       else if (e.key === 'ArrowRight') unitStep(1);
@@ -878,36 +926,199 @@
     }
     if (ui.dlg) ui.dlg.addEventListener('close', () => { if (authorDirty) refresh(); });
 
-    // ------------------------------------------------------------ phân tích câu (assets/analyze.js, tải khi bấm)
-    let analyzer = null;
-    function openAnalyze() {
-      const a = cfg.analyze;
-      if (!a || !ui.anDlg) return;
-      if (typeof ui.anDlg.showModal === 'function') ui.anDlg.showModal(); else ui.anDlg.setAttribute('open', '');
-      if (analyzer) { analyzer.then((api) => api && api.focus()); return; }
-      analyzer = new Promise((ok, fail) => {
-        if (window.HSKNAnalyze) return ok();
-        const s = document.createElement('script');
-        s.src = a.script;
-        s.onload = ok;
-        s.onerror = () => fail(new Error('Không tải được phần phân tích câu.'));
-        document.head.appendChild(s);
-      }).then(() => window.HSKNAnalyze.mount(ui.anBody, Object.assign({}, a, {
-        // loa trong khung phân tích → tạm dừng bài đang nghe
-        onSpeak: () => { if (!audio.paused) audio.pause(); },
-      }))).catch((e) => {
-        analyzer = null;
-        ui.anBody.innerHTML = `<div class="hk-empty">${esc(e.message)}</div>`;
+    // ------------------------------------------------------------ tab: Nghe / Tra câu / Sổ tay
+    const flash = (msg) => {
+      let el = root.querySelector('.hk-toast');
+      if (!el) { el = document.createElement('div'); el.className = 'hk-toast'; el.setAttribute('role', 'status'); root.appendChild(el); }
+      el.textContent = msg;
+      el.classList.add('is-show');
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.remove('is-show'), 3500);
+    };
+    // loa ở Tra câu / Sổ tay → tạm dừng bài đang nghe
+    window.HSKNSpeak.onStart(() => { if (!audio.paused) audio.pause(); });
+
+    const lookup = cfg.analyze ? window.HSKNAnalyze.mount(ui.lookup, Object.assign({}, cfg.analyze, {
+      onNeedLogin: (msg) => openAuth(msg),
+    })) : null;
+    const notebook = window.HSKNNotebook.mount(ui.notebook, {
+      analyze: cfg.analyze,
+      onLogin: (msg) => openAuth(msg),
+      onLookup: () => { showView('lookup'); if (lookup) lookup.focus(); },
+      onAnalyze: (text) => { showView('lookup'); if (lookup) lookup.analyze(text); },
+      onPlay: (id, autoplay) => {
+        unlock();
+        showView('listen');
+        st.tab = 'mine';
+        delete st.forceSpeech[id];
+        Object.keys(st.prefetch).forEach((k) => { if (k.startsWith('me/')) delete st.prefetch[k]; });
+        syncMine();
+        load(id, { autoplay });
+        ui.player.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      },
+    });
+
+    function showView(v) {
+      if (v === 'lookup' && !lookup) v = 'listen';
+      st.view = v;
+      root.querySelectorAll('.hk-view').forEach((el) => { el.hidden = el.dataset.pane !== v; });
+      root.querySelectorAll('.hk-navbtn').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === v)));
+      root.dataset.view = v;
+      if (v === 'notebook') notebook.show();
+      if (v !== 'listen') window.scrollTo({ top: Math.min(window.scrollY, root.getBoundingClientRect().top + window.scrollY), behavior: 'auto' });
+      persist();
+      syncMini();
+      try {
+        const url = new URL(location.href);
+        if (v === 'listen') url.searchParams.delete('view'); else url.searchParams.set('view', v);
+        history.replaceState(history.state, '', url);
+      } catch (e) { /* bỏ qua */ }
+    }
+
+    // sổ tay đổi (lưu / xoá / tạo bài) → cập nhật các bài "Của tôi" trong thư viện
+    function syncMine() {
+      if (!Me.enabled || !Me.loaded) return;
+      st.tracks = st.tracks.filter((t) => t.group !== 'mine').concat(Me.lists.map((l) => {
+        const n = l.words + l.sentences;
+        const p = [];
+        if (l.words) p.push(`${l.words} từ`);
+        if (l.sentences) p.push(`${l.sentences} câu`);
+        return { id: 'my-' + l.id, type: 'mine', group: 'mine', title: l.name, subtitle: 'Sổ tay · ' + (p.join(', ') || 'trống'), items: n, playable: n };
+      }));
+      renderLibrary();
+    }
+    if (Me.enabled) {
+      Me.on(() => {
+        Object.keys(st.prefetch).forEach((k) => { if (k.startsWith('me/')) delete st.prefetch[k]; });
+        syncMine();
       });
     }
-    if (ui.anDlg) ui.anDlg.addEventListener('close', () => { if (window.HSKNAnalyze) window.HSKNAnalyze.stop(); });
+
+    // ------------------------------------------------------------ menu "+ Tạo"
+    function openMenu(html) {
+      ui.menu.innerHTML = `<div class="hk-sheet-body hk-menu-body">${html}</div>`;
+      if (typeof ui.menu.showModal === 'function') ui.menu.showModal(); else ui.menu.setAttribute('open', '');
+    }
+    ui.menu.addEventListener('click', (e) => { if (e.target === ui.menu || e.target.closest('[data-menu="close"]')) ui.menu.close(); });
+    const item = (act, icon, title, sub) => `<button class="hk-menu-item" data-act="${act}">${svg(icon)}<span><b>${title}</b><small>${sub}</small></span></button>`;
+
+    function openCreateMenu() {
+      openMenu(`<h3>Tạo mới</h3>
+        ${cfg.analyze ? item('new-phrase', 'lens', 'Câu / từ mới', 'Nhập tiếng Trung hoặc tiếng Việt → phân tích, nghe, lưu vào sổ tay') : ''}
+        ${item('new-track', 'add', 'Tạo bài nghe mới', 'Đặt tên, dán nhiều câu / từ → AI phân tích và ghép thành bài nghe')}
+        ${cfg.author ? item('author', 'spark', 'Tạo chủ đề bằng AI', 'Quản trị: chủ đề mới cho mọi người (từ vựng + mẫu câu)') : ''}
+        <button class="hk-btn hk-menu-close" data-menu="close">Đóng</button>`);
+    }
+
+    function openAccount() {
+      openMenu(`<div class="hk-acct"><img src="${esc(user.avatar)}" alt="" width="48" height="48">
+          <span><b>${esc(user.name)}</b><small>Đã đăng nhập · nhớ trong 1 năm trên máy này</small></span></div>
+        ${item('notebook-view', 'book', 'Sổ tay của tôi', 'Câu, từ đã lưu và bài nghe tự tạo')}
+        ${cfg.author ? `<a class="hk-menu-item" href="${esc(cfg.author.manage)}">${svg('tune')}<span><b>Quản trị nội dung</b><small>Trang WP Admin</small></span></a>` : ''}
+        <a class="hk-menu-item" href="${esc(user.logout)}">${svg('logout')}<span><b>Đăng xuất</b><small>Lần sau cần đăng nhập lại</small></span></a>
+        <button class="hk-btn hk-menu-close" data-menu="close">Đóng</button>`);
+      const nb = ui.menu.querySelector('[data-act="notebook-view"]');
+      if (nb) nb.dataset.view = 'notebook';
+    }
+
+    // ------------------------------------------------------------ đăng nhập / đăng ký (nhớ 1 năm)
+    function openAuth(reason, mode) {
+      mode = mode || 'login';
+      const reg = cfg.auth && cfg.auth.register;
+      ui.auth.innerHTML = `<form class="hk-dlg-form hk-auth" data-mode="${mode}">
+        <div class="hk-dlg-head"><strong>${mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</strong>
+          <button type="button" class="hk-icon" data-auth="close" aria-label="Đóng">${svg('close')}</button></div>
+        <div class="hk-dlg-body">
+          ${reason ? `<p class="hk-auth-why">${esc(reason)}</p>` : ''}
+          ${mode === 'register' ? `<label class="hk-f"><span>Tên hiển thị</span><input name="name" autocomplete="name" maxlength="60"></label>` : ''}
+          <label class="hk-f"><span>${mode === 'login' ? 'Email hoặc tên đăng nhập' : 'Email'}</span>
+            <input name="${mode === 'login' ? 'login' : 'email'}" type="${mode === 'login' ? 'text' : 'email'}" required autocomplete="${mode === 'login' ? 'username' : 'email'}" autocapitalize="off" spellcheck="false"></label>
+          <label class="hk-f"><span>Mật khẩu${mode === 'register' ? ' <small>ít nhất 8 ký tự</small>' : ''}</span>
+            <input name="password" type="password" required minlength="${mode === 'register' ? 8 : 1}" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}"></label>
+          ${mode === 'register' ? '<input name="website" tabindex="-1" autocomplete="off" class="hk-hp" aria-hidden="true">' : ''}
+          <label class="hk-check"><input type="checkbox" name="remember" checked> Ghi nhớ đăng nhập 1 năm trên máy này</label>
+          <div class="hk-auth-err" role="alert"></div>
+          <button type="submit" class="hk-btn primary hk-auth-go">${mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</button>
+          <div class="hk-auth-alt">
+            ${mode === 'login'
+              ? `<a href="${esc(cfg.auth.lost)}">Quên mật khẩu?</a>${reg ? '<button type="button" data-auth="register">Chưa có tài khoản? Đăng ký</button>' : ''}`
+              : '<button type="button" data-auth="login">Đã có tài khoản? Đăng nhập</button>'}
+          </div>
+        </div></form>`;
+      if (!ui.auth.open) { if (typeof ui.auth.showModal === 'function') ui.auth.showModal(); else ui.auth.setAttribute('open', ''); }
+      setTimeout(() => { const f = ui.auth.querySelector('input:not(.hk-hp)'); if (f) f.focus(); }, 30);
+    }
+    ui.auth.addEventListener('click', (e) => {
+      if (e.target === ui.auth) { ui.auth.close(); return; }
+      const b = e.target.closest('[data-auth]');
+      if (!b) return;
+      if (b.dataset.auth === 'close') ui.auth.close();
+      else openAuth('', b.dataset.auth);
+    });
+    ui.auth.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const mode = f.dataset.mode;
+      const err = f.querySelector('.hk-auth-err');
+      const go = f.querySelector('.hk-auth-go');
+      const body = Object.fromEntries(new FormData(f));
+      body.remember = !!f.remember.checked;
+      go.disabled = true;
+      go.textContent = 'Đang gửi…';
+      err.textContent = '';
+      try {
+        const res = await fetch(cfg.rest + 'auth/' + mode, {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || 'Không đăng nhập được.');
+        go.textContent = 'Thành công!';
+        location.reload();   // trang mới có nonce + thông tin của tài khoản vừa đăng nhập
+      } catch (er) {
+        err.textContent = er.message;
+        go.disabled = false;
+        go.textContent = mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản';
+      }
+    });
+
+    // ------------------------------------------------------------ app (PWA): service worker + nút "Cài app"
+    let installPrompt = null;
+    const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (cfg.pwa && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || /\.local$/.test(location.hostname))) {
+      navigator.serviceWorker.register(cfg.pwa.sw, { scope: cfg.pwa.scope }).catch(() => { /* site chưa có HTTPS / bị chặn */ });
+    }
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      installPrompt = e;
+      ui.install.hidden = false;
+    });
+    window.addEventListener('appinstalled', () => { ui.install.hidden = true; installPrompt = null; flash('Đã cài app HSK Nghe.'); });
+    if (!standalone() && isIOS) ui.install.hidden = false;   // Safari không có nút cài tự động → hướng dẫn
+    if (standalone()) root.classList.add('is-standalone');
+
+    async function install() {
+      if (installPrompt) {
+        installPrompt.prompt();
+        const r = await installPrompt.userChoice.catch(() => null);
+        if (r && r.outcome === 'accepted') ui.install.hidden = true;
+        installPrompt = null;
+        return;
+      }
+      openMenu(`<h3>Cài HSK Nghe lên màn hình chính</h3>
+        ${isIOS ? `<ol class="hk-howto"><li>Mở trang này bằng <b>Safari</b>.</li><li>Bấm nút <b>Chia sẻ</b> (hình vuông có mũi tên ↑).</li>
+          <li>Chọn <b>Thêm vào MH chính</b> (Add to Home Screen) → <b>Thêm</b>.</li></ol>`
+          : `<ol class="hk-howto"><li>Mở menu của trình duyệt (⋮).</li><li>Chọn <b>Cài đặt ứng dụng</b> / <b>Thêm vào màn hình chính</b>.</li></ol>`}
+        <p class="hk-hint">App mở toàn màn hình, nghe tiếp được khi khoá máy, và giữ đăng nhập 1 năm.</p>
+        <button class="hk-btn hk-menu-close" data-menu="close">Đã hiểu</button>`);
+    }
 
     // tải (lại) danh sách bài — lúc mở trang và sau khi admin tạo / ẩn chủ đề
     function refresh() {
       authorDirty = false;
       st.prefetch = {};
       return Promise.all([api('tracks'), api('topics').catch(() => [])]).then(([tracks, topics]) => {
-        st.tracks = tracks;
+        st.tracks = tracks.concat(st.tracks.filter((t) => t.group === 'mine'));
         topics.forEach((t) => { st.topics[t.id] = t; });
         if (st.track) { const t = tracks.find((x) => x.id === st.track.id); if (t) Object.assign(st.track, { prev: t.prev, next: t.next }); }
         renderLibrary();
@@ -917,7 +1128,11 @@
     }
 
     updateBar();
-    refresh().then((tracks) => {
+    showView(st.view);
+    const mineReady = Me.enabled ? Me.load().catch(() => null) : Promise.resolve();
+    Promise.all([refresh(), mineReady]).then(([tracks]) => {
+      syncMine();
+      tracks = st.tracks;
       const want = [cfg.track, saved.track].find((id) => id && tracks.some((t) => t.id === id && t.items));
       const scoped = tracks.filter((t) => t.items && (!cfg.group || t.group === cfg.group));
       const id = want && (!cfg.group || tracks.find((t) => t.id === want).group === cfg.group) ? want : (scoped[0] && scoped[0].id);

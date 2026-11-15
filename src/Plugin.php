@@ -5,7 +5,10 @@ namespace HSKN;
 use HSKN\Admin\AdminPages;
 use HSKN\Install\Schema;
 use HSKN\Rest\AdminController;
+use HSKN\Pwa\Pwa;
 use HSKN\Rest\AnalyzeController;
+use HSKN\Rest\AuthController;
+use HSKN\Rest\MeController;
 use HSKN\Rest\AuthorController;
 use HSKN\Rest\ContentController;
 use HSKN\Rest\TopicsController;
@@ -40,10 +43,14 @@ final class Plugin
             (new AuthorController())->register();
             (new ContentController())->register();
             (new AnalyzeController())->register();
+            (new MeController())->register();
+            (new AuthController())->register();
         });
 
         (new Player())->register();
         (new Analyze())->register();
+        (new Pwa())->register();
+        AuthController::rememberYear();
         (new Updater())->register();   // chạy cả trong cron (WP kiểm tra cập nhật nền), không chỉ trong admin
 
         if (is_admin()) {
